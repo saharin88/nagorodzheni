@@ -1,10 +1,12 @@
 <?php
 
-use App\Filament\Admin\Resources\Decrees\Pages\CreateDecree;
-use App\Filament\Admin\Resources\Decrees\Pages\EditDecree;
+use App\Contracts\DecreeMetaParser;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
 use App\Models\Decree;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Filament\Actions\CreateAction;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -32,6 +34,7 @@ it('renders the decrees list page', function () {
 
     livewire(ListDecrees::class)
         ->assertOk()
+        ->assertActionHasLabel(CreateAction::class, 'Add decree')
         ->assertCanSeeTableRecords($decrees);
 });
 
@@ -53,59 +56,56 @@ it('sorts the decrees by date', function () {
 });
 
 it('creates a decree from the form', function () {
-    livewire(CreateDecree::class)
+    $url = 'https://www.president.gov.ua/documents/8752026-61465';
+
+    $decreeMetaParser = Mockery::mock(DecreeMetaParser::class);
+    $decreeMetaParser->shouldReceive('getDecreeNumber')
+        ->once()
+        ->with($url)
+        ->andReturn('875/2026');
+    $decreeMetaParser->shouldReceive('getDecreeDate')
+        ->once()
+        ->with($url)
+        ->andReturn(CarbonImmutable::parse('2026-09-04'));
+
+    $this->app->instance(DecreeMetaParser::class, $decreeMetaParser);
+
+    livewire(ListDecrees::class)
+        ->mountAction(CreateAction::class)
         ->fillForm([
-            'number' => '125/2026',
-            'date' => '2026-09-10',
-            'url' => 'https://example.com/125',
+            'url' => $url,
         ])
-        ->call('create')
+        ->goToNextWizardStep()
+        ->callMountedAction()
         ->assertHasNoFormErrors();
 
     $this->assertDatabaseHas('decrees', [
-        'number' => '125/2026',
-        'url' => 'https://example.com/125',
+        'number' => '875/2026',
+        'url' => $url,
     ]);
-    expect(Decree::query()->where('number', '125/2026')->firstOrFail()->date->toDateString())->toBe('2026-09-10');
+    expect(Decree::query()->where('number', '875/2026')->firstOrFail()->date->toDateString())->toBe('2026-09-04');
 });
 
 it('validates decree form fields on create', function () {
-    livewire(CreateDecree::class)
+    livewire(ListDecrees::class)
+        ->mountAction(CreateAction::class)
         ->fillForm([
-            'number' => '',
-            'date' => null,
             'url' => 'not-an-url',
         ])
-        ->call('create')
+        ->goToNextWizardStep()
         ->assertHasFormErrors([
-            'number' => 'required',
-            'date' => 'required',
             'url' => 'url',
         ]);
 });
 
-it('updates an existing decree', function () {
+it('does not expose decree editing actions', function () {
     $decree = Decree::factory()->create([
         'number' => '126/2026',
         'date' => '2026-09-11',
         'url' => 'https://example.com/126',
     ]);
 
-    livewire(EditDecree::class, [
-        'record' => $decree->getKey(),
-    ])
-        ->fillForm([
-            'number' => '126/2026-updated',
-            'date' => '2026-09-12',
-            'url' => 'https://example.com/126-updated',
-        ])
-        ->call('save')
-        ->assertHasNoFormErrors();
-
-    $this->assertDatabaseHas('decrees', [
-        'id' => $decree->id,
-        'number' => '126/2026-updated',
-        'url' => 'https://example.com/126-updated',
-    ]);
-    expect($decree->fresh()->date->toDateString())->toBe('2026-09-12');
+    livewire(ListDecrees::class)
+        ->assertActionDoesNotExist(TestAction::make('edit')->table($decree))
+        ->assertTableActionDoesNotExist('edit', null, $decree);
 });

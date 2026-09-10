@@ -2,8 +2,6 @@
 
 namespace App\Filament\Admin\Resources\Decrees;
 
-use App\Filament\Admin\Resources\Decrees\Pages\CreateDecree;
-use App\Filament\Admin\Resources\Decrees\Pages\EditDecree;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
 use App\Filament\Admin\Resources\Decrees\Schemas\DecreeForm;
 use App\Filament\Admin\Resources\Decrees\Tables\DecreesTable;
@@ -13,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 class DecreeResource extends Resource
 {
@@ -30,6 +29,11 @@ class DecreeResource extends Resource
         return DecreesTable::configure($table);
     }
 
+    public static function canEdit(Model $record): bool
+    {
+        return false;
+    }
+
     public static function getRelations(): array
     {
         return [
@@ -41,8 +45,6 @@ class DecreeResource extends Resource
     {
         return [
             'index' => ListDecrees::route('/'),
-            'create' => CreateDecree::route('/create'),
-            'edit' => EditDecree::route('/{record}/edit'),
         ];
     }
 }
