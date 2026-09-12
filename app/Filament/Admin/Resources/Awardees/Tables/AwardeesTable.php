@@ -3,15 +3,22 @@
 namespace App\Filament\Admin\Resources\Awardees\Tables;
 
 use App\Filament\Admin\Resources\Decrees\DecreeResource;
+use App\Models\Award;
 use App\Models\Awardee;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
+use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
 class AwardeesTable
 {
@@ -97,6 +104,41 @@ class AwardeesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('changeAward')
+                        ->label(__('Change award'))
+                        ->icon(Heroicon::OutlinedTrophy)
+                        ->modalHeading(__('Change award'))
+                        ->modalDescription(__('The selected awardees are linked to the award you choose.'))
+                        ->modalSubmitActionLabel(__('Change'))
+                        ->modalWidth(Width::Small)
+                        ->deselectRecordsAfterCompletion()
+                        ->schema([
+                            Select::make('award_id')
+                                ->label(__('Award'))
+                                ->options(fn (): array => Award::query()
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->all()
+                                )
+                                ->searchable()
+                                ->required(),
+                        ])
+                        ->action(function (Collection $records, array $data): void {
+                            $award = Award::query()->whereKey($data['award_id'])->firstOrFail();
+
+                            Awardee::query()
+                                ->whereKey($records->pluck('id')->all())
+                                ->update(['award_id' => $award->getKey()]);
+
+                            Notification::make()
+                                ->success()
+                                ->title(__('Award changed'))
+                                ->body(__('The awardees are linked to ":award" now. Updated awardees: :count', [
+                                    'award' => $award->name,
+                                    'count' => $records->count(),
+                                ]))
+                                ->send();
+                        }),
                     DeleteBulkAction::make(),
                 ]),
             ]);

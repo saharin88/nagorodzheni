@@ -8,6 +8,7 @@ use App\Models\User;
 use Filament\Actions\CreateAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Filament\Tables\Filters\SelectFilter;
 
 use function Pest\Livewire\livewire;
@@ -188,4 +189,51 @@ it('deletes an awardee from the table', function () {
         ->callAction(TestAction::make('delete')->table($awardee));
 
     expect(Awardee::query()->whereKey($awardee->getKey())->exists())->toBeFalse();
+});
+
+it('changes the award of the selected awardees in bulk', function () {
+    $heroAward = Award::factory()->create(['name' => 'Герой України']);
+    $orderAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+
+    $firstAwardee = Awardee::factory()->for($heroAward, 'award')->create();
+    $secondAwardee = Awardee::factory()->for($heroAward, 'award')->create();
+    $unselectedAwardee = Awardee::factory()->for($heroAward, 'award')->create();
+
+    livewire(ListAwardees::class)
+        ->callTableBulkAction('changeAward', [$firstAwardee, $secondAwardee], ['award_id' => $orderAward->getKey()])
+        ->assertHasNoFormErrors()
+        ->assertNotified(
+            Notification::make()
+                ->success()
+                ->title('Award changed')
+                ->body('The awardees are linked to "Орден Богдана Хмельницького" now. Updated awardees: 2'),
+        );
+
+    expect($firstAwardee->refresh()->award_id)->toBe($orderAward->getKey())
+        ->and($secondAwardee->refresh()->award_id)->toBe($orderAward->getKey())
+        ->and($unselectedAwardee->refresh()->award_id)->toBe($heroAward->getKey());
+});
+
+it('offers the award choice when changing the award of the selected awardees', function () {
+    $heroAward = Award::factory()->create(['name' => 'Герой України']);
+    $orderAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+    $awardee = Awardee::factory()->for($heroAward, 'award')->create();
+
+    livewire(ListAwardees::class)
+        ->mountTableBulkAction('changeAward', [$awardee])
+        ->assertSee('Герой України')
+        ->assertSee('Орден Богдана Хмельницького');
+});
+
+it('requires an award to change the award of the selected awardees', function () {
+    $heroAward = Award::factory()->create(['name' => 'Герой України']);
+    $awardee = Awardee::factory()->for($heroAward, 'award')->create();
+
+    livewire(ListAwardees::class)
+        ->callTableBulkAction('changeAward', [$awardee])
+        ->assertHasFormErrors([
+            'award_id' => 'required',
+        ]);
+
+    expect($awardee->refresh()->award_id)->toBe($heroAward->getKey());
 });
