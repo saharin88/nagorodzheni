@@ -16,6 +16,8 @@ use Illuminate\Support\Carbon;
  * @property string $url
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read int|null $awardees_count
+ * @property-read int|null $posthumous_awardees_count
  */
 #[Fillable(['number', 'date', 'url'])]
 class Decree extends Model

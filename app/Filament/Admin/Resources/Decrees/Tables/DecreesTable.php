@@ -8,6 +8,7 @@ use App\Filament\Admin\Resources\Awardees\AwardeeResource;
 use App\Models\Decree;
 use App\Services\DecreeAwardeeImporter;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -42,11 +43,19 @@ class DecreesTable
                     ->toggleable(),
                 TextColumn::make('awardees_count')
                     ->label(__('Awardees'))
-                    ->counts('awardees')
+                    ->counts([
+                        'awardees',
+                        'awardees as posthumous_awardees_count' => fn (Builder $query
+                        ): Builder => $query->where('is_posthumous', true),
+                    ])
                     ->url(fn ($state, Decree $record): ?string => $state > 0 ? AwardeeResource::getFilteredIndexUrl([
                         'decree' => [$record->getKey()],
                     ]) : null)
+                    ->suffix(fn (Decree $record): string => $record->posthumous_awardees_count > 0
+                        ? ' '.__('(:count posthumous)', ['count' => $record->posthumous_awardees_count])
+                        : '')
                     ->alignCenter()
+                    ->color('primary')
                     ->sortable()
                     ->toggleable(),
                 TextColumn::make('created_at')
@@ -82,38 +91,40 @@ class DecreesTable
                     )),
             ])
             ->recordActions([
-                Action::make('importAwardees')
-                    ->label(__('Import awardees and awards'))
-                    ->icon(Heroicon::OutlinedArrowDownTray)
-                    ->requiresConfirmation()
-                    ->modalHeading(__('Import awardees and awards'))
-                    ->modalDescription(__('Import the awardees of this decree together with their awards?'))
-                    ->modalSubmitActionLabel(__('Import'))
-                    ->action(function (Decree $record, DecreeAwardeeImporter $decreeAwardeeImporter): void {
-                        try {
-                            $importedAwardeesCount = $decreeAwardeeImporter->import($record);
-                        } catch (InvalidArgumentException|RequestException|DecreeParseException|AwardeeNameInflectionException $exception) {
-                            Log::error('Failed to import decree awardees', [
-                                'decree' => $record->getKey(),
-                                'exception' => $exception,
-                            ]);
+                ActionGroup::make([
+                    Action::make('importAwardees')
+                        ->label(__('Import awardees and awards'))
+                        ->icon(Heroicon::OutlinedArrowDownTray)
+                        ->requiresConfirmation()
+                        ->modalHeading(__('Import awardees and awards'))
+                        ->modalDescription(__('Import the awardees of this decree together with their awards?'))
+                        ->modalSubmitActionLabel(__('Import'))
+                        ->action(function (Decree $record, DecreeAwardeeImporter $decreeAwardeeImporter): void {
+                            try {
+                                $importedAwardeesCount = $decreeAwardeeImporter->import($record);
+                            } catch (InvalidArgumentException|RequestException|DecreeParseException|AwardeeNameInflectionException $exception) {
+                                Log::error('Failed to import decree awardees', [
+                                    'decree' => $record->getKey(),
+                                    'exception' => $exception,
+                                ]);
+
+                                Notification::make()
+                                    ->danger()
+                                    ->title(__('Unable to import awardees and awards'))
+                                    ->body($exception->getMessage())
+                                    ->send();
+
+                                return;
+                            }
 
                             Notification::make()
-                                ->danger()
-                                ->title(__('Unable to import awardees and awards'))
-                                ->body($exception->getMessage())
+                                ->success()
+                                ->title(__('Awardees and awards imported'))
+                                ->body(__('Imported awardees: :count', ['count' => $importedAwardeesCount]))
                                 ->send();
-
-                            return;
-                        }
-
-                        Notification::make()
-                            ->success()
-                            ->title(__('Awardees and awards imported'))
-                            ->body(__('Imported awardees: :count', ['count' => $importedAwardeesCount]))
-                            ->send();
-                    }),
-                DeleteAction::make(),
+                        }),
+                    DeleteAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

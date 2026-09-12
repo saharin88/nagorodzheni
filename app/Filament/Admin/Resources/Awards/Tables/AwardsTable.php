@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
@@ -29,10 +30,17 @@ class AwardsTable
                     ->sortable(),
                 TextColumn::make('awardees_count')
                     ->label(__('Awardees'))
-                    ->counts('awardees')
+                    ->counts([
+                        'awardees',
+                        'awardees as posthumous_awardees_count' => fn (Builder $query): Builder => $query->where('is_posthumous', true),
+                    ])
                     ->url(fn ($state, Award $record): ?string => $state > 0 ? AwardeeResource::getFilteredIndexUrl([
                         'award' => [$record->getKey()],
                     ]) : null)
+                    ->suffix(fn (Award $record): string => $record->posthumous_awardees_count > 0
+                        ? ' '.__('(:count posthumous)', ['count' => $record->posthumous_awardees_count])
+                        : '')
+                    ->color('primary')
                     ->alignCenter()
                     ->sortable()
                     ->toggleable(),

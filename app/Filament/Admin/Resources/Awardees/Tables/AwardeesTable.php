@@ -2,6 +2,7 @@
 
 namespace App\Filament\Admin\Resources\Awardees\Tables;
 
+use App\Filament\Admin\Resources\Decrees\DecreeResource;
 use App\Models\Awardee;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -40,6 +41,10 @@ class AwardeesTable
                 TextColumn::make('decree.number')
                     ->label(__('Decree number'))
                     ->alignCenter()
+                    ->url(fn (?string $state, Awardee $record): string => DecreeResource::getFilteredIndexUrl([
+                        'search' => $state,
+                    ]))
+                    ->color('primary')
                     ->toggleable(),
                 TextColumn::make('decree.date')
                     ->label(__('Decree date'))

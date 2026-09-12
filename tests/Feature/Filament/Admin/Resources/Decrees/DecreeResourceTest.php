@@ -3,6 +3,7 @@
 use App\Contracts\Contracts\DecreeMetaParser;
 use App\Exceptions\DecreeParseException;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
+use App\Models\Awardee;
 use App\Models\Decree;
 use App\Models\User;
 use App\Services\DecreeAwardeeImporter;
@@ -111,6 +112,20 @@ it('does not expose decree editing actions', function () {
     livewire(ListDecrees::class)
         ->assertActionDoesNotExist(TestAction::make('edit')->table($decree))
         ->assertTableActionDoesNotExist('edit', null, $decree);
+});
+
+it('counts the awardees of every decree and separates the posthumous ones', function () {
+    $decree = Decree::factory()->create();
+    Awardee::factory()->count(2)->for($decree, 'decree')->create();
+    Awardee::factory()->for($decree, 'decree')->create(['is_posthumous' => true]);
+
+    $decreeWithoutPosthumousAwardees = Decree::factory()->create();
+    Awardee::factory()->for($decreeWithoutPosthumousAwardees, 'decree')->create();
+
+    livewire(ListDecrees::class)
+        ->assertTableColumnStateSet('awardees_count', 3, $decree)
+        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 posthumous)', $decree)
+        ->assertTableColumnFormattedStateSet('awardees_count', 1, $decreeWithoutPosthumousAwardees);
 });
 
 it('offers the awardee import action for every decree', function () {

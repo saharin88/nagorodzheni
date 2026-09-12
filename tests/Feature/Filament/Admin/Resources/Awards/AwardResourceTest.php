@@ -103,6 +103,19 @@ it('counts the awardees of every award', function () {
         ->assertTableColumnStateSet('awardees_count', 0, $awardWithoutAwardees);
 });
 
+it('separates the posthumous awardees from the total count', function () {
+    $award = Award::factory()->create();
+    Awardee::factory()->count(2)->for($award, 'award')->create();
+    Awardee::factory()->for($award, 'award')->create(['is_posthumous' => true]);
+
+    $awardWithoutPosthumousAwardees = Award::factory()->create();
+    Awardee::factory()->for($awardWithoutPosthumousAwardees, 'award')->create();
+
+    livewire(ListAwards::class)
+        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 posthumous)', $award)
+        ->assertTableColumnFormattedStateSet('awardees_count', 1, $awardWithoutPosthumousAwardees);
+});
+
 it('links the awardees count to the awardee list filtered by the award', function () {
     $award = Award::factory()->create();
 
