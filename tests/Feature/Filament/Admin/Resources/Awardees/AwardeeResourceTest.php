@@ -100,8 +100,8 @@ it('filters awardees by decree number', function () {
 
 it('lists award names and decree numbers in the filter options', function () {
     Award::factory()->create(['name' => 'Герой України']);
-    Decree::factory()->create(['number' => '123/2026']);
-    Decree::factory()->create(['number' => '456/2026']);
+    Decree::factory()->create(['number' => '123/2026', 'date' => '2026-01-15']);
+    Decree::factory()->create(['number' => '456/2026', 'date' => '2026-02-15']);
 
     $html = str_replace('\\', '', livewire(ListAwardees::class)->assertOk()->html());
 

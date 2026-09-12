@@ -3,11 +3,29 @@
 use App\Ai\Agents\UkrainianNameInflector;
 use App\Contracts\Contracts\AwardeeNameInflector;
 use App\Exceptions\AwardeeNameInflectionException;
+use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
-use Laravel\Ai\Providers\DeepSeekProvider;
 use Tests\TestCase;
 
 uses(TestCase::class);
+
+/**
+ * Get the lab that the group's agent declares through its #[Provider] attribute,
+ * so the tests keep following the configured provider instead of hard-coding it.
+ */
+function inflectorDeclaredLab(): Lab
+{
+    $attributes = (new ReflectionClass(UkrainianNameInflector::class))->getAttributes(Provider::class);
+
+    expect($attributes)->toHaveCount(1);
+
+    $lab = $attributes[0]->newInstance()->value;
+
+    expect($lab)->toBeInstanceOf(Lab::class);
+
+    return $lab;
+}
 
 it('converts a full name to the genitive case', function () {
     UkrainianNameInflector::fake([
@@ -148,8 +166,42 @@ it('does not prompt the agent when every name is blank', function () {
     UkrainianNameInflector::assertNeverPrompted();
 });
 
+it('does not prompt the agent when there are no names at all', function () {
+    UkrainianNameInflector::fake();
+
+    expect(app(AwardeeNameInflector::class)->toGenitiveMany([]))->toBe([])
+        ->and(app(AwardeeNameInflector::class)->fromGenitiveMany([]))->toBe([]);
+
+    UkrainianNameInflector::assertNeverPrompted();
+});
+
+it('inflects the names with the provider declared by the agent', function () {
+    $resolvedProvider = null;
+
+    UkrainianNameInflector::fake(function ($prompt, $attachments, $provider, $model) use (&$resolvedProvider) {
+        $resolvedProvider = $provider;
+
+        return ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]];
+    });
+
+    expect(app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+        ->toBe('Іваненка Івана Івановича');
+
+    expect($resolvedProvider)->not->toBeNull()
+        ->and($resolvedProvider->driver())->toBe(inflectorDeclaredLab()->value);
+});
+
 it('throws an exception when the agent returns no names', function () {
     UkrainianNameInflector::fake([[]]);
+
+    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned no names');
+});
+
+it('throws an exception when the agent returns names that are not a list', function () {
+    UkrainianNameInflector::fake([
+        ['names' => 'Іваненка Івана Івановича'],
+    ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
         ->toThrow(AwardeeNameInflectionException::class, 'the agent returned no names');
@@ -164,9 +216,41 @@ it('throws an exception when the agent returns an unexpected entry', function ()
         ->toThrow(AwardeeNameInflectionException::class, 'unknown entry [5]');
 });
 
+it('throws an exception when the agent returns a non-numeric index', function () {
+    UkrainianNameInflector::fake([
+        ['names' => [['index' => 'перший', 'full_name' => 'Іваненка Івана Івановича']]],
+    ]);
+
+    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned an unexpected entry');
+});
+
+it('throws an exception when the agent returns a non-string name', function () {
+    UkrainianNameInflector::fake([
+        ['names' => [['index' => 1, 'full_name' => null]]],
+    ]);
+
+    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned an unexpected entry');
+});
+
 it('throws an exception when the agent returns an incomplete list', function () {
     UkrainianNameInflector::fake([
         ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
+    ]);
+
+    expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
+        'Іваненко Іван Іванович',
+        'Шевченко Тарас Григорович',
+    ]))->toThrow(AwardeeNameInflectionException::class, '1 of 2 names were returned');
+});
+
+it('throws an exception when the agent repeats the same index', function () {
+    UkrainianNameInflector::fake([
+        ['names' => [
+            ['index' => 1, 'full_name' => 'Іваненка Івана Івановича'],
+            ['index' => 1, 'full_name' => 'Шевченка Тараса Григоровича'],
+        ]],
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
@@ -182,19 +266,4 @@ it('throws an exception when the agent returns a blank name', function () {
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
         ->toThrow(AwardeeNameInflectionException::class, 'Unable to inflect the awardee name [Іваненко Іван Іванович].');
-});
-
-it('inflects names with the deepseek provider', function () {
-    $resolvedProvider = null;
-
-    UkrainianNameInflector::fake(function ($prompt, $attachments, $provider, $model) use (&$resolvedProvider) {
-        $resolvedProvider = $provider;
-
-        return ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]];
-    });
-
-    app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович');
-
-    expect($resolvedProvider)->toBeInstanceOf(DeepSeekProvider::class)
-        ->and($resolvedProvider->driver())->toBe('deepseek');
 });

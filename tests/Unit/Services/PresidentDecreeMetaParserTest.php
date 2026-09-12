@@ -2,149 +2,235 @@
 
 use App\Contracts\Contracts\DecreeAwardeeParser;
 use App\Contracts\Contracts\DecreeMetaParser;
+use App\Exceptions\DecreeParseException;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 uses(TestCase::class);
 
-it('parses decree number and date from decree page HTML', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+/**
+ * The decree paths that are exercised by this file. Every one of them is faked,
+ * so the tests never touch the network and stay independent from each other.
+ *
+ * @return list<string>
+ */
+function decreePaths(): array
+{
+    return [
+        '8752026-61465',
+        '3712021-39725',
+        '8752026-61465-unparseable',
+        '8752026-61465-no-date',
+        '8752026-61465-unknown-month',
+        '8752026-61465-not-award',
+        '8752026-61465-not-found',
+        '8752026-61465-connection-error',
+    ];
+}
+
+function decreeUrl(string $path): string
+{
+    return "https://www.president.gov.ua/documents/{$path}";
+}
+
+function decreeFixture(string $fileName): string
+{
+    $html = file_get_contents(base_path("tests/Fixtures/decrees/{$fileName}"));
 
     expect($html)->not->toBeFalse();
 
-    Cache::flush();
+    return $html;
+}
 
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+function decreeHtmlCachePath(string $decreeUrl): string
+{
+    return storage_path('framework/cache/decrees/'.hash('sha256', $decreeUrl).'.html');
+}
+
+function forgetDecreeHtmlCache(string $decreeUrl): void
+{
+    $path = decreeHtmlCachePath($decreeUrl);
+
+    if (file_exists($path)) {
+        unlink($path);
+    }
+}
+
+beforeEach(function (): void {
+    foreach (decreePaths() as $path) {
+        forgetDecreeHtmlCache(decreeUrl($path));
+    }
+});
+
+afterEach(function (): void {
+    foreach (decreePaths() as $path) {
+        forgetDecreeHtmlCache(decreeUrl($path));
+    }
+});
+
+it('parses the decree number and date from the decree page', function () {
+    $url = decreeUrl('8752026-61465');
+
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
 
     $parser = app(DecreeMetaParser::class);
 
-    expect($parser->getDecreeNumber($url))->toBe('875/2026');
-    expect($parser->getDecreeDate($url))
-        ->toBeInstanceOf(CarbonImmutable::class)
+    expect($parser->getDecreeNumber($url))->toBe('875/2026')
+        ->and($parser->getDecreeDate($url))->toBeInstanceOf(CarbonImmutable::class)
         ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-09-04');
 });
 
-it('caches decree HTML and parsed meta by decree URL', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+it('falls back to the page title when the decree heading is missing', function () {
+    $url = decreeUrl('8752026-61465');
 
-    expect($html)->not->toBeFalse();
+    $html = preg_replace(
+        '/<h1 itemprop="name">.*?<\/h1>/su',
+        '',
+        decreeFixture('875_2026.html')
+    );
 
-    Cache::flush();
-    $suffix = decreeCacheToken($url);
-    $cachedHtmlPath = storage_path("framework/cache/decrees/{$suffix}.html");
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
+    expect($html)->not->toBeNull();
 
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+    Http::fake([$url => Http::response($html, 200)]);
+
+    expect(app(DecreeMetaParser::class)->getDecreeNumber($url))->toBe('875/2026');
+});
+
+it('parses the meta from the html that is already cached on disk', function () {
+    $url = decreeUrl('8752026-61465');
+
+    File::ensureDirectoryExists(dirname(decreeHtmlCachePath($url)));
+    File::put(decreeHtmlCachePath($url), decreeFixture('875_2026.html'));
+
+    Http::fake();
 
     $parser = app(DecreeMetaParser::class);
 
-    $parser->getDecreeNumber($url);
-    $parser->getDecreeDate($url);
-    $parser->getDecreeNumber($url);
+    expect($parser->getDecreeNumber($url))->toBe('875/2026')
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-09-04');
 
-    expect(file_exists($cachedHtmlPath))->toBeTrue()
-        ->and(Cache::has("decree-meta:parsed:{$suffix}"))->toBeTrue();
+    Http::assertNothingSent();
+});
+
+it('caches the fetched html on disk and asks the site only once per url', function () {
+    $url = decreeUrl('8752026-61465');
+    $html = decreeFixture('875_2026.html');
+
+    Http::fake([$url => Http::response($html, 200)]);
+
+    $parser = app(DecreeMetaParser::class);
+
+    expect($parser->getDecreeNumber($url))->toBe('875/2026')
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-09-04')
+        ->and($parser->getDecreeNumber($url))->toBe('875/2026');
+
+    expect(decreeHtmlCachePath($url))->toBeFile()
+        ->and(file_get_contents(decreeHtmlCachePath($url)))->toBe($html);
+
+    Http::assertSentCount(1);
 
     Http::assertSent(fn ($request): bool => $request->hasHeader('User-Agent')
         && $request->hasHeader('Accept-Language')
         && $request->hasHeader('Sec-Ch-Ua')
         && $request->hasHeader('Sec-Fetch-Mode'));
-    Http::assertSentCount(1);
 });
 
-it('does not cache decree HTML when response status is not 200', function () {
-    $url = 'https://www.president.gov.ua/documents/non-200-decree';
+it('does not cache the html when the decree response status is not 200', function () {
+    $url = decreeUrl('8752026-61465-not-found');
 
-    Cache::flush();
-    $cachedHtmlPath = storage_path('framework/cache/decrees/'.decreeCacheToken($url).'.html');
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
+    Http::fake([$url => Http::response('No Content', 204)]);
 
-    Http::fake([
-        $url => Http::response('No Content', 204),
-    ]);
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Unexpected decree response status');
 
-    $parser = app(DecreeMetaParser::class);
-
-    expect(fn () => $parser->getDecreeNumber($url))
-        ->toThrow(RuntimeException::class, 'Unexpected decree response status');
-
-    expect(file_exists($cachedHtmlPath))->toBeFalse();
+    expect(decreeHtmlCachePath($url))->not->toBeFile();
 });
 
-it('does not cache decree HTML when decree number/date are not parseable', function () {
-    $url = 'https://www.president.gov.ua/documents/invalid-decree-html';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+it('does not cache the html when the decree number cannot be parsed', function () {
+    $url = decreeUrl('8752026-61465-unparseable');
 
-    expect($html)->not->toBeFalse();
+    $html = preg_replace(
+        '/№\s*[0-9]+\/[0-9]{4}/u',
+        'без номера',
+        decreeFixture('875_2026.html')
+    );
 
-    $invalidHtml = preg_replace('/№\s*[0-9]+\/[0-9]{4}/u', 'без номера', $html);
+    expect($html)->not->toBeNull();
 
-    expect($invalidHtml)->not->toBeNull();
+    Http::fake([$url => Http::response($html, 200)]);
 
-    Cache::flush();
-    $cachedHtmlPath = storage_path('framework/cache/decrees/'.decreeCacheToken($url).'.html');
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Unable to parse decree number');
 
-    Http::fake([
-        $url => Http::response($invalidHtml, 200),
-    ]);
-
-    $parser = app(DecreeMetaParser::class);
-
-    expect(fn () => $parser->getDecreeNumber($url))
-        ->toThrow(RuntimeException::class, 'Unable to parse decree number');
-
-    expect(file_exists($cachedHtmlPath))->toBeFalse();
+    expect(decreeHtmlCachePath($url))->not->toBeFile();
 });
 
-it('throws exception when decree date is missing in article body', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465-missing-date';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+it('throws an exception when the decree date is missing in the article body', function () {
+    $url = decreeUrl('8752026-61465-no-date');
 
-    expect($html)->not->toBeFalse();
+    $html = preg_replace(
+        '/\b\d{1,2}\s+[а-яіїєґ]+\s+\d{4}\s+року\b/ui',
+        'дата відсутня',
+        decreeFixture('875_2026.html')
+    );
 
-    $htmlWithoutDate = preg_replace('/\b\d{1,2}\s+[а-яіїєґ]+\s+\d{4}\s+року\b/ui', 'дата відсутня', $html);
+    expect($html)->not->toBeNull();
 
-    expect($htmlWithoutDate)->not->toBeNull();
+    Http::fake([$url => Http::response($html, 200)]);
 
-    Cache::flush();
-
-    Http::fake([
-        $url => Http::response($htmlWithoutDate, 200),
-    ]);
-
-    $parser = app(DecreeMetaParser::class);
-
-    expect(fn () => $parser->getDecreeNumber($url))
-        ->toThrow(RuntimeException::class, 'Unable to parse decree date');
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Unable to parse decree date');
 });
 
-it('returns decree meta even when html cache file cannot be written', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+it('throws an exception when the decree date has an unknown month', function () {
+    $url = decreeUrl('8752026-61465-unknown-month');
 
-    expect($html)->not->toBeFalse();
+    $html = str_replace('вересня 2026 року', 'місяця 2026 року', decreeFixture('875_2026.html'));
 
-    Cache::flush();
+    Http::fake([$url => Http::response($html, 200)]);
 
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Unknown Ukrainian month');
+});
+
+it('recognises an award decree when only its short description mentions the awards', function () {
+    $url = decreeUrl('8752026-61465');
+
+    $html = preg_replace(
+        '/<meta (?:name="(?:description|twitter:description)"|property="og:description")[^>]*>/u',
+        '',
+        decreeFixture('875_2026.html')
+    );
+
+    expect($html)->not->toBeNull();
+
+    Http::fake([$url => Http::response($html, 200)]);
+
+    expect(app(DecreeMetaParser::class)->getDecreeNumber($url))->toBe('875/2026');
+});
+
+it('throws an exception when the decree is not about state awards', function () {
+    $url = decreeUrl('8752026-61465-not-award');
+
+    $html = str_replace(
+        'Про відзначення державними нагородами України',
+        'Про внесення змін до деяких указів Президента України',
+        decreeFixture('875_2026.html')
+    );
+
+    Http::fake([$url => Http::response($html, 200)]);
+
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Decree is not about state awards');
+});
+
+it('returns the meta even when the html cache file cannot be written', function () {
+    $url = decreeUrl('8752026-61465');
+
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
 
     File::partialMock()
         ->shouldReceive('exists')
@@ -164,47 +250,34 @@ it('returns decree meta even when html cache file cannot be written', function (
         ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-09-04');
 });
 
-it('throws exception when decree is not about state awards', function () {
-    $url = 'https://www.president.gov.ua/documents/not-award-decree';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+it('reports a connection error when the decree cannot be fetched', function () {
+    $url = decreeUrl('8752026-61465-connection-error');
 
-    expect($html)->not->toBeFalse();
+    Http::fake(fn (): never => throw new ConnectionException('cURL error 28: Operation timed out'));
 
-    $notAwardHtml = preg_replace(
-        '/Про відзначення державними нагородами України/u',
-        'Про внесення змін до деяких указів Президента України',
-        $html
-    );
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Connection error while fetching the decree');
+});
 
-    expect($notAwardHtml)->not->toBeNull();
+it('rejects a decree url that is not using https', function () {
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber('http://www.president.gov.ua/documents/8752026-61465'))
+        ->toThrow(InvalidArgumentException::class, 'Only HTTPS scheme is allowed');
+});
 
-    Cache::flush();
+it('rejects a decree url of a foreign host', function () {
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeDate('https://example.com/documents/8752026-61465'))
+        ->toThrow(InvalidArgumentException::class, 'Invalid decree URL host');
+});
 
-    Http::fake([
-        $url => Http::response($notAwardHtml, 200),
-    ]);
-
-    $parser = app(DecreeMetaParser::class);
-
-    expect(fn () => $parser->getDecreeNumber($url))
-        ->toThrow(RuntimeException::class, 'Decree is not about state awards');
+it('rejects a decree url that only contains the allowed host', function () {
+    expect(fn () => app(DecreeAwardeeParser::class)->getAwardees('https://president.gov.ua.example.com/documents/8752026-61465'))
+        ->toThrow(InvalidArgumentException::class, 'Invalid decree URL host');
 });
 
 it('parses every awardee mentioned in the decree', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+    $url = decreeUrl('8752026-61465');
 
-    expect($html)->not->toBeFalse();
-
-    Cache::flush();
-    $cachedHtmlPath = storage_path('framework/cache/decrees/'.decreeCacheToken($url).'.html');
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
-
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
 
     $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
 
@@ -226,20 +299,9 @@ it('parses every awardee mentioned in the decree', function () {
 });
 
 it('marks the awardees that were honoured posthumously', function () {
-    $url = 'https://www.president.gov.ua/documents/8752026-61465';
-    $html = file_get_contents(base_path('№875_2026.htm'));
+    $url = decreeUrl('8752026-61465');
 
-    expect($html)->not->toBeFalse();
-
-    Cache::flush();
-    $cachedHtmlPath = storage_path('framework/cache/decrees/'.decreeCacheToken($url).'.html');
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
-
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
 
     $awardees = collect(app(DecreeAwardeeParser::class)->getAwardees($url));
 
@@ -251,48 +313,66 @@ it('marks the awardees that were honoured posthumously', function () {
     ]);
 });
 
-it('parses awardees when the rank is separated by a hyphen instead of a dash', function () {
-    $url = 'https://www.president.gov.ua/documents/3712021-39725';
-    $html = file_get_contents(base_path('№371_2021.html'));
+it('reuses the parsed awardees of a decree without asking the site again', function () {
+    $url = decreeUrl('8752026-61465');
 
-    expect($html)->not->toBeFalse();
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
 
-    Cache::flush();
-    $cachedHtmlPath = storage_path('framework/cache/decrees/'.decreeCacheToken($url).'.html');
-    if (file_exists($cachedHtmlPath)) {
-        unlink($cachedHtmlPath);
-    }
+    $parser = app(DecreeAwardeeParser::class);
 
-    Http::fake([
-        $url => Http::response($html, 200),
-    ]);
+    expect($parser->getAwardees($url))->toBe($parser->getAwardees($url));
+
+    Http::assertSentCount(1);
+});
+
+it('parses the awardees when the rank is separated by a hyphen instead of a dash', function () {
+    $url = decreeUrl('3712021-39725');
+
+    Http::fake([$url => Http::response(decreeFixture('371_2021.html'), 200)]);
 
     $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
 
-    expect($awardees)->toHaveCount(22)
-        ->and($awardees[0])->toBe([
+    expect($awardees)->toBe([
+        [
             'full_name' => 'Бродовського Богдана Віталійовича',
             'rank' => 'майора',
             'award' => 'орденом Богдана Хмельницького III ступеня',
             'is_posthumous' => true,
-        ])
-        ->and($awardees[6])->toBe([
+        ],
+        [
+            'full_name' => 'Костенко-Сидоренка Юрія Петровича',
+            'rank' => 'капітана',
+            'award' => 'орденом Богдана Хмельницького III ступеня',
+            'is_posthumous' => false,
+        ],
+        [
             'full_name' => 'Шартаву Давіда',
             'rank' => 'старшого солдата',
-            'award' => 'орденом “За мужність” III ступеня',
+            'award' => 'орденом Богдана Хмельницького III ступеня',
+            'is_posthumous' => false,
+        ],
+        [
+            'full_name' => 'Коваленка Петра Івановича',
+            'rank' => 'полковника',
+            'award' => 'звання Герой України',
             'is_posthumous' => true,
-        ])
-        ->and($awardees[21])->toBe([
+        ],
+        [
             'full_name' => 'Шапаренка Артура Юрійовича',
             'rank' => 'солдата',
             'award' => 'медаллю “Захиснику Вітчизни”',
             'is_posthumous' => false,
-        ])
-        ->and(collect($awardees)->where('is_posthumous', true))->toHaveCount(7)
-        ->and(collect($awardees)->pluck('award')->unique())->toHaveCount(4);
+        ],
+    ]);
 });
 
-function decreeCacheToken(string $decreeUrl): string
-{
-    return hash('sha256', $decreeUrl);
-}
+it('parses the meta of the decree whose rank is separated by a hyphen', function () {
+    $url = decreeUrl('3712021-39725');
+
+    Http::fake([$url => Http::response(decreeFixture('371_2021.html'), 200)]);
+
+    $parser = app(DecreeMetaParser::class);
+
+    expect($parser->getDecreeNumber($url))->toBe('371/2021')
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2021-05-18');
+});
