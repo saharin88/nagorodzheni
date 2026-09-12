@@ -6,6 +6,7 @@ use Database\Factories\DecreeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -21,6 +22,14 @@ class Decree extends Model
 {
     /** @use HasFactory<DecreeFactory> */
     use HasFactory;
+
+    /**
+     * @return HasMany<Awardee, $this>
+     */
+    public function awardees(): HasMany
+    {
+        return $this->hasMany(Awardee::class);
+    }
 
     /**
      * Get the attributes that should be cast.

@@ -2,15 +2,25 @@
 
 namespace App\Filament\Admin\Resources\Decrees\Tables;
 
+use App\Exceptions\AwardeeNameInflectionException;
+use App\Exceptions\DecreeParseException;
+use App\Filament\Admin\Resources\Awardees\AwardeeResource;
 use App\Models\Decree;
+use App\Services\DecreeAwardeeImporter;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 
 class DecreesTable
 {
@@ -29,6 +39,15 @@ class DecreesTable
                     ->url(fn (string $state): string => $state, shouldOpenInNewTab: true)
                     ->color('primary')
                     ->searchable()
+                    ->toggleable(),
+                TextColumn::make('awardees_count')
+                    ->label(__('Awardees'))
+                    ->counts('awardees')
+                    ->url(fn ($state, Decree $record): ?string => $state > 0 ? AwardeeResource::getFilteredIndexUrl([
+                        'decree' => [$record->getKey()],
+                    ]) : null)
+                    ->alignCenter()
+                    ->sortable()
                     ->toggleable(),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -63,6 +82,37 @@ class DecreesTable
                     )),
             ])
             ->recordActions([
+                Action::make('importAwardees')
+                    ->label(__('Import awardees and awards'))
+                    ->icon(Heroicon::OutlinedArrowDownTray)
+                    ->requiresConfirmation()
+                    ->modalHeading(__('Import awardees and awards'))
+                    ->modalDescription(__('Import the awardees of this decree together with their awards?'))
+                    ->modalSubmitActionLabel(__('Import'))
+                    ->action(function (Decree $record, DecreeAwardeeImporter $decreeAwardeeImporter): void {
+                        try {
+                            $importedAwardeesCount = $decreeAwardeeImporter->import($record);
+                        } catch (InvalidArgumentException|RequestException|DecreeParseException|AwardeeNameInflectionException $exception) {
+                            Log::error('Failed to import decree awardees', [
+                                'decree' => $record->getKey(),
+                                'exception' => $exception,
+                            ]);
+
+                            Notification::make()
+                                ->danger()
+                                ->title(__('Unable to import awardees and awards'))
+                                ->body($exception->getMessage())
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->success()
+                            ->title(__('Awardees and awards imported'))
+                            ->body(__('Imported awardees: :count', ['count' => $importedAwardeesCount]))
+                            ->send();
+                    }),
                 DeleteAction::make(),
             ])
             ->toolbarActions([

@@ -2,7 +2,8 @@
 
 namespace App\Services;
 
-use App\Contracts\DecreeMetaParser;
+use App\Contracts\Contracts\DecreeAwardeeParser;
+use App\Contracts\Contracts\DecreeMetaParser;
 use App\Exceptions\DecreeParseException;
 use Carbon\CarbonImmutable;
 use Dom\HTMLDocument;
@@ -10,11 +11,12 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Throwable;
 use Uri\Rfc3986\Uri;
 
-class PresidentDecreeMetaParser implements DecreeMetaParser
+class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
 {
     private const string ALLOWED_HOST = 'president.gov.ua';
 
@@ -24,8 +26,17 @@ class PresidentDecreeMetaParser implements DecreeMetaParser
         'вересня' => 9, 'жовтня' => 10, 'листопада' => 11, 'грудня' => 12,
     ];
 
+    /**
+     * Звання відділене від ПІБ довгим тире, коротким тире або дефісом.
+     * Дефіс вимагає пробілів з обох боків, щоб не розрізати подвійні прізвища («КОСТЕНКО-СИДОРЕНКА»).
+     */
+    private const string AWARDEE_PATTERN = '/^(?<full_name>.+?)(?:\s*\((?<is_posthumous>посмертно)\))?(?:\s*[—–]\s*|\s+-\s+)(?<rank>.+)$/u';
+
     /** @var array<string, array{number: string, date: string}> */
     private array $runtimeCache = [];
+
+    /** @var array<string, list<array{full_name: string, rank: string, award: string, is_posthumous: bool}>> */
+    private array $awardeesCache = [];
 
     public function getDecreeNumber(string $decreeUrl): string
     {
@@ -35,6 +46,19 @@ class PresidentDecreeMetaParser implements DecreeMetaParser
     public function getDecreeDate(string $decreeUrl): CarbonImmutable
     {
         return CarbonImmutable::parse($this->getParsedMeta($decreeUrl)['date']);
+    }
+
+    /**
+     * @return list<array{full_name: string, rank: string, award: string, is_posthumous: bool}>
+     */
+    public function getAwardees(string $decreeUrl): array
+    {
+        $normalizedUrl = $this->normalizeAndValidateUrl($decreeUrl);
+
+        return $this->awardeesCache[$normalizedUrl] ??= $this->parseAwardees(
+            $this->getCachedHtml($normalizedUrl),
+            $normalizedUrl,
+        );
     }
 
     /**
@@ -175,8 +199,6 @@ class PresidentDecreeMetaParser implements DecreeMetaParser
                 |> (fn ($x) => implode(' ', $x))
                 |> mb_strtolower(...);
 
-        Log::info($haystack);
-
         if (! str_contains($haystack, 'про відзначення державними нагородами')) {
             throw new DecreeParseException(
                 "Decree is not about state awards [{$decreeUrl}]."
@@ -186,33 +208,30 @@ class PresidentDecreeMetaParser implements DecreeMetaParser
 
     private function parseDecreeNumber(HTMLDocument $document, string $decreeUrl): string
     {
-        $heading = trim((string) $document->querySelector('.document_page h1[itemprop="name"]')?->textContent);
+        $heading = trim((string) $document->querySelector('.document_page h1[itemprop="name"]')?->textContent)
+            ?: trim((string) $document->querySelector('title')?->textContent);
 
-        if ($heading === '') {
-            $heading = trim((string) $document->querySelector('title')?->textContent);
-        }
+        $normalizedHeading = Str::squish($heading);
 
-        $normalizedHeading = preg_replace('/\s+/u', ' ', $heading);
+        $number = Str::match('/№\s*([0-9]+\/[0-9]{4})/u', $normalizedHeading);
 
-        if (! preg_match('/№\s*([0-9]+\/[0-9]{4})/u', $normalizedHeading, $matches)) {
+        if (empty($number)) {
             throw new DecreeParseException("Unable to parse decree number [{$decreeUrl}].");
         }
 
-        return $matches[1];
+        return $number;
     }
 
     private function parseDecreeDate(HTMLDocument $document, string $decreeUrl): CarbonImmutable
     {
         $articleBodyText = trim((string) $document->querySelector('div[itemprop="articleBody"]')?->textContent);
-        $normalizedText = preg_replace('/\s+/u', ' ', $articleBodyText);
+        $dates = Str::matchAll('/\b(\d{1,2}\s+[а-яіїєґ]+\s+\d{4}\s+року)\b/ui', Str::squish($articleBodyText));
 
-        preg_match_all('/\b(\d{1,2}\s+[а-яіїєґ]+\s+\d{4}\s+року)\b/ui', $normalizedText, $matches);
-
-        if (empty($matches[1])) {
+        if ($dates->isEmpty()) {
             throw new DecreeParseException("Unable to parse decree date [{$decreeUrl}].");
         }
 
-        $dateLiteral = end($matches[1]);
+        $dateLiteral = $dates->last();
 
         return $this->resolveUkrainianDate($dateLiteral, $decreeUrl);
     }
@@ -232,5 +251,68 @@ class PresidentDecreeMetaParser implements DecreeMetaParser
 
         return CarbonImmutable::createFromFormat('!Y-n-j', "{$parts['year']}-{$month}-{$parts['day']}")
             ?: throw new DecreeParseException("Invalid decree date value [{$decreeUrl}]: {$dateLiteral}");
+    }
+
+    /**
+     * @return list<array{full_name: string, rank: string, award: string, is_posthumous: bool}>
+     */
+    private function parseAwardees(string $html, string $decreeUrl): array
+    {
+        $document = HTMLDocument::createFromString($html);
+        $this->assertAwardDecree($document, $decreeUrl);
+
+        $articleBody = $document->querySelector('div[itemprop="articleBody"]');
+
+        if ($articleBody === null) {
+            throw new DecreeParseException("Unable to parse decree awardees [{$decreeUrl}].");
+        }
+
+        $awardees = [];
+        $award = '';
+
+        foreach ($articleBody->querySelectorAll('p') as $paragraph) {
+            $text = Str::squish($paragraph->textContent);
+
+            $heading = $paragraph->querySelector('strong');
+
+            if ($heading !== null && Str::squish($heading->textContent) === $text) {
+                $award = $this->normalizeAwardName($text);
+
+                continue;
+            }
+
+            $awardee = $this->parseAwardee($text, $award);
+
+            if ($awardee !== null) {
+                $awardees[] = $awardee;
+            }
+        }
+
+        return $awardees;
+    }
+
+    /**
+     * Parse a single decree paragraph, e.g. «СИДОРА Юрія Васильовича (посмертно) — капітана»
+     * or «БРОДОВСЬКОГО Богдана Віталійовича (посмертно) - майора».
+     *
+     * @return array{full_name: string, rank: string, award: string, is_posthumous: bool}|null
+     */
+    private function parseAwardee(string $text, string $award): ?array
+    {
+        if (preg_match(self::AWARDEE_PATTERN, $text, $matches) !== 1) {
+            return null;
+        }
+
+        return [
+            'full_name' => Str::convertCase(Str::squish($matches['full_name']), MB_CASE_TITLE),
+            'rank' => Str::squish(rtrim($matches['rank'], ' .')),
+            'award' => $award,
+            'is_posthumous' => $matches['is_posthumous'] !== '',
+        ];
+    }
+
+    private function normalizeAwardName(string $heading): string
+    {
+        return Str::squish((string) preg_replace('/^(Нагородити|Присвоїти)\s+/u', '', $heading));
     }
 }

@@ -1,13 +1,16 @@
 <?php
 
-use App\Contracts\DecreeMetaParser;
+use App\Contracts\Contracts\DecreeMetaParser;
+use App\Exceptions\DecreeParseException;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
 use App\Models\Decree;
 use App\Models\User;
+use App\Services\DecreeAwardeeImporter;
 use Carbon\CarbonImmutable;
 use Filament\Actions\CreateAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 use function Pest\Livewire\livewire;
@@ -108,4 +111,49 @@ it('does not expose decree editing actions', function () {
     livewire(ListDecrees::class)
         ->assertActionDoesNotExist(TestAction::make('edit')->table($decree))
         ->assertTableActionDoesNotExist('edit', null, $decree);
+});
+
+it('offers the awardee import action for every decree', function () {
+    $decree = Decree::factory()->create();
+
+    livewire(ListDecrees::class)
+        ->assertActionExists(TestAction::make('importAwardees')->table($decree))
+        ->assertActionHasLabel(TestAction::make('importAwardees')->table($decree), 'Import awardees and awards');
+});
+
+it('imports the awardees of the decree from the table action', function () {
+    $decree = Decree::factory()->create();
+
+    $this->mock(DecreeAwardeeImporter::class)
+        ->shouldReceive('import')
+        ->once()
+        ->with(Mockery::on(fn (Decree $record): bool => $record->getKey() === $decree->getKey()))
+        ->andReturn(174);
+
+    livewire(ListDecrees::class)
+        ->callAction(TestAction::make('importAwardees')->table($decree))
+        ->assertNotified(
+            Notification::make()
+                ->success()
+                ->title('Awardees and awards imported')
+                ->body('Imported awardees: 174'),
+        );
+});
+
+it('notifies when the awardees of the decree cannot be imported', function () {
+    $decree = Decree::factory()->create();
+
+    $this->mock(DecreeAwardeeImporter::class)
+        ->shouldReceive('import')
+        ->once()
+        ->andThrow(new DecreeParseException('Decree is not about state awards.'));
+
+    livewire(ListDecrees::class)
+        ->callAction(TestAction::make('importAwardees')->table($decree))
+        ->assertNotified(
+            Notification::make()
+                ->danger()
+                ->title('Unable to import awardees and awards')
+                ->body('Decree is not about state awards.'),
+        );
 });

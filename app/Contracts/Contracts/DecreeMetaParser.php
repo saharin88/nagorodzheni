@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Contracts;
+namespace App\Contracts\Contracts;
 
 use App\Services\PresidentDecreeMetaParser;
 use Carbon\CarbonImmutable;
