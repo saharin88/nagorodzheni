@@ -8,6 +8,7 @@ use App\Models\User;
 use Filament\Actions\CreateAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
 
 use function Pest\Livewire\livewire;
 
@@ -117,4 +118,46 @@ it('does not register separate create and edit pages', function () {
 
     $this->get('/admin/awards/create')->assertNotFound();
     $this->get("/admin/awards/{$award->getKey()}/edit")->assertNotFound();
+});
+
+it('offers the award merging bulk action', function () {
+    livewire(ListAwards::class)
+        ->assertTableBulkActionExists('mergeAwards')
+        ->assertTableBulkActionHasLabel('mergeAwards', 'Merge awards');
+});
+
+it('merges the selected awards into the one with the most awardees', function () {
+    $primaryAward = Award::factory()->create(['name' => 'Герой України']);
+    $duplicateAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+
+    Awardee::factory()->count(2)->for($primaryAward, 'award')->create();
+    $duplicateAwardee = Awardee::factory()->for($duplicateAward, 'award')->create();
+
+    livewire(ListAwards::class)
+        ->callTableBulkAction('mergeAwards', [$duplicateAward, $primaryAward])
+        ->assertNotified(
+            Notification::make()
+                ->success()
+                ->title('Awards merged')
+                ->body('The awardees are linked to "Герой України" now. Deleted awards: 1'),
+        );
+
+    expect($duplicateAwardee->refresh()->award_id)->toBe($primaryAward->getKey())
+        ->and(Award::query()->whereKey($duplicateAward->getKey())->exists())->toBeFalse()
+        ->and(Award::query()->whereKey($primaryAward->getKey())->exists())->toBeTrue();
+});
+
+it('refuses to merge a single selected award', function () {
+    $award = Award::factory()->create();
+
+    livewire(ListAwards::class)
+        ->callTableBulkAction('mergeAwards', [$award])
+        ->assertNotified(
+            Notification::make()
+                ->danger()
+                ->title('Unable to merge awards')
+                ->body('Select at least two awards to merge.'),
+        );
+
+    expect(Award::query()->whereKey($award->getKey())->exists())->toBeTrue();
 });
