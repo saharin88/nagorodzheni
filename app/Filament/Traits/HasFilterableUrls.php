@@ -10,7 +10,7 @@ trait HasFilterableUrls
     /**
      * @param  array<string, mixed>  $filters
      */
-    public static function getFilteredIndexUrl(array $filters): string
+    public static function getFilteredIndexUrl(array $filters = [], ?string $search = null): string
     {
         $queryFilters = [];
 
@@ -31,6 +31,7 @@ trait HasFilterableUrls
 
         return static::getUrl('index', [
             'filters' => $queryFilters,
+            'search' => $search,
         ]);
     }
 }

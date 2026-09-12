@@ -41,9 +41,9 @@ class AwardeesTable
                 TextColumn::make('decree.number')
                     ->label(__('Decree number'))
                     ->alignCenter()
-                    ->url(fn (?string $state, Awardee $record): string => DecreeResource::getFilteredIndexUrl([
-                        'search' => $state,
-                    ]))
+                    ->url(fn (?string $state, Awardee $record): string => DecreeResource::getFilteredIndexUrl(
+                        search: $state
+                    ))
                     ->color('primary')
                     ->toggleable(),
                 TextColumn::make('decree.date')
