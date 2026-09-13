@@ -24,7 +24,7 @@ it('renders the awards list page', function () {
 
     livewire(ListAwards::class)
         ->assertOk()
-        ->assertActionHasLabel(CreateAction::class, 'Add award')
+        ->assertActionHasLabel(CreateAction::class, 'Додати нагороду')
         ->assertCanSeeTableRecords($awards);
 });
 
@@ -112,7 +112,7 @@ it('separates the posthumous awardees from the total count', function () {
     Awardee::factory()->for($awardWithoutPosthumousAwardees, 'award')->create();
 
     livewire(ListAwards::class)
-        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 posthumous)', $award)
+        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 посмертно)', $award)
         ->assertTableColumnFormattedStateSet('awardees_count', 1, $awardWithoutPosthumousAwardees);
 });
 
@@ -136,7 +136,7 @@ it('does not register separate create and edit pages', function () {
 it('offers the award merging bulk action', function () {
     livewire(ListAwards::class)
         ->assertTableBulkActionExists('mergeAwards')
-        ->assertTableBulkActionHasLabel('mergeAwards', 'Merge awards');
+        ->assertTableBulkActionHasLabel('mergeAwards', 'Об\'єднати нагороди');
 });
 
 it('merges the selected awards into the one with the most awardees', function () {
@@ -151,8 +151,8 @@ it('merges the selected awards into the one with the most awardees', function ()
         ->assertNotified(
             Notification::make()
                 ->success()
-                ->title('Awards merged')
-                ->body('The awardees are linked to "Герой України" now. Deleted awards: 1'),
+                ->title('Нагороди об\'єднано')
+                ->body('Нагороджених прив\'язано до «Герой України». Видалено нагород: 1'),
         );
 
     expect($duplicateAwardee->refresh()->award_id)->toBe($primaryAward->getKey())
@@ -168,8 +168,8 @@ it('refuses to merge a single selected award', function () {
         ->assertNotified(
             Notification::make()
                 ->danger()
-                ->title('Unable to merge awards')
-                ->body('Select at least two awards to merge.'),
+                ->title('Не вдалося об\'єднати нагороди')
+                ->body('Виберіть щонайменше дві нагороди для об\'єднання.'),
         );
 
     expect(Award::query()->whereKey($award->getKey())->exists())->toBeTrue();

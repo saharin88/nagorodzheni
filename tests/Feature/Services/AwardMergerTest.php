@@ -75,7 +75,7 @@ it('refuses to merge fewer than two awards', function () {
     Awardee::factory()->for($award, 'award')->create();
 
     app(AwardMerger::class)->merge(Award::query()->whereKey($award->getKey())->get());
-})->throws(InvalidArgumentException::class, 'Select at least two awards to merge.');
+})->throws(InvalidArgumentException::class, 'Виберіть щонайменше дві нагороди для об\'єднання.');
 
 it('merges awards without any awardees into the oldest one', function () {
     $oldestAward = Award::factory()->create();

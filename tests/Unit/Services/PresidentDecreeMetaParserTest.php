@@ -144,7 +144,7 @@ it('does not cache the html when the decree response status is not 200', functio
     Http::fake([$url => Http::response('No Content', 204)]);
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Unexpected decree response status');
+        ->toThrow(DecreeParseException::class, 'Неочікуваний статус відповіді указу');
 
     expect(decreeHtmlCachePath($url))->not->toBeFile();
 });
@@ -163,7 +163,7 @@ it('does not cache the html when the decree number cannot be parsed', function (
     Http::fake([$url => Http::response($html, 200)]);
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Unable to parse decree number');
+        ->toThrow(DecreeParseException::class, 'Не вдалося розібрати номер указу');
 
     expect(decreeHtmlCachePath($url))->not->toBeFile();
 });
@@ -182,7 +182,7 @@ it('throws an exception when the decree date is missing in the article body', fu
     Http::fake([$url => Http::response($html, 200)]);
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Unable to parse decree date');
+        ->toThrow(DecreeParseException::class, 'Не вдалося розібрати дату указу');
 });
 
 it('throws an exception when the decree date has an unknown month', function () {
@@ -193,7 +193,7 @@ it('throws an exception when the decree date has an unknown month', function () 
     Http::fake([$url => Http::response($html, 200)]);
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Unknown Ukrainian month');
+        ->toThrow(DecreeParseException::class, 'Невідомий український місяць');
 });
 
 it('recognises an award decree when only its short description mentions the awards', function () {
@@ -224,7 +224,7 @@ it('throws an exception when the decree is not about state awards', function () 
     Http::fake([$url => Http::response($html, 200)]);
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Decree is not about state awards');
+        ->toThrow(DecreeParseException::class, 'Указ не стосується державних нагород');
 });
 
 it('returns the meta even when the html cache file cannot be written', function () {
@@ -256,22 +256,22 @@ it('reports a connection error when the decree cannot be fetched', function () {
     Http::fake(fn (): never => throw new ConnectionException('cURL error 28: Operation timed out'));
 
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
-        ->toThrow(DecreeParseException::class, 'Connection error while fetching the decree');
+        ->toThrow(DecreeParseException::class, 'Помилка з\'єднання під час отримання указу');
 });
 
 it('rejects a decree url that is not using https', function () {
     expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber('http://www.president.gov.ua/documents/8752026-61465'))
-        ->toThrow(InvalidArgumentException::class, 'Only HTTPS scheme is allowed');
+        ->toThrow(InvalidArgumentException::class, 'Дозволено лише схему HTTPS');
 });
 
 it('rejects a decree url of a foreign host', function () {
     expect(fn () => app(DecreeMetaParser::class)->getDecreeDate('https://example.com/documents/8752026-61465'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid decree URL host');
+        ->toThrow(InvalidArgumentException::class, 'Неприпустимий хост URL указу');
 });
 
 it('rejects a decree url that only contains the allowed host', function () {
     expect(fn () => app(DecreeAwardeeParser::class)->getAwardees('https://president.gov.ua.example.com/documents/8752026-61465'))
-        ->toThrow(InvalidArgumentException::class, 'Invalid decree URL host');
+        ->toThrow(InvalidArgumentException::class, 'Неприпустимий хост URL указу');
 });
 
 it('parses every awardee mentioned in the decree', function () {

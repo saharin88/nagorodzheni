@@ -24,7 +24,7 @@ it('counts the awardees of every award and the posthumous ones among them', func
 
     livewire(AwardsStatsOverview::class)
         ->assertOk()
-        ->assertSeeInOrder(['Герой України', '3', '(1 posthumous)'])
+        ->assertSeeInOrder(['Герой України', '3', '(1 посмертно)'])
         ->assertSee('Орден Богдана Хмельницького');
 });
 
@@ -35,7 +35,7 @@ it('shows a zero awardee count for an award nobody has received', function () {
         ->assertOk()
         ->assertSeeInOrder(['Герой України', '0'])
         ->assertSeeHtml('fi-wi-stats-overview-stat-value')
-        ->assertDontSee('posthumous');
+        ->assertDontSee('посмертно');
 });
 
 it('orders the awards by the number of awardees', function () {

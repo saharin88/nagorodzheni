@@ -22,6 +22,21 @@ class DecreeResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentText;
 
+    public static function getNavigationLabel(): string
+    {
+        return __('Decrees');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('Decree');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('Decrees');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return DecreeForm::configure($schema);

@@ -38,7 +38,7 @@ it('renders the decrees list page', function () {
 
     livewire(ListDecrees::class)
         ->assertOk()
-        ->assertActionHasLabel(CreateAction::class, 'Add decree')
+        ->assertActionHasLabel(CreateAction::class, 'Додати указ')
         ->assertCanSeeTableRecords($decrees);
 });
 
@@ -124,7 +124,7 @@ it('counts the awardees of every decree and separates the posthumous ones', func
 
     livewire(ListDecrees::class)
         ->assertTableColumnStateSet('awardees_count', 3, $decree)
-        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 posthumous)', $decree)
+        ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 посмертно)', $decree)
         ->assertTableColumnFormattedStateSet('awardees_count', 1, $decreeWithoutPosthumousAwardees);
 });
 
@@ -133,7 +133,7 @@ it('offers the awardee import action for every decree', function () {
 
     livewire(ListDecrees::class)
         ->assertActionExists(TestAction::make('importAwardees')->table($decree))
-        ->assertActionHasLabel(TestAction::make('importAwardees')->table($decree), 'Import awardees and awards');
+        ->assertActionHasLabel(TestAction::make('importAwardees')->table($decree), 'Імпортувати нагороджених і нагороди');
 });
 
 it('imports the awardees of the decree from the table action', function () {
@@ -150,8 +150,8 @@ it('imports the awardees of the decree from the table action', function () {
         ->assertNotified(
             Notification::make()
                 ->success()
-                ->title('Awardees and awards imported')
-                ->body('Imported awardees: 174'),
+                ->title('Нагороджених і нагороди імпортовано')
+                ->body('Імпортовано нагороджених: 174'),
         );
 });
 
@@ -168,7 +168,7 @@ it('notifies when the awardees of the decree cannot be imported', function () {
         ->assertNotified(
             Notification::make()
                 ->danger()
-                ->title('Unable to import awardees and awards')
+                ->title('Не вдалося імпортувати нагороджених і нагороди')
                 ->body('Decree is not about state awards.'),
         );
 });

@@ -195,7 +195,7 @@ it('throws an exception when the agent returns no names', function () {
     UkrainianNameInflector::fake([[]]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned no names');
+        ->toThrow(AwardeeNameInflectionException::class, 'агент не повернув жодного ПІБ');
 });
 
 it('throws an exception when the agent returns names that are not a list', function () {
@@ -204,7 +204,7 @@ it('throws an exception when the agent returns names that are not a list', funct
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned no names');
+        ->toThrow(AwardeeNameInflectionException::class, 'агент не повернув жодного ПІБ');
 });
 
 it('throws an exception when the agent returns an unexpected entry', function () {
@@ -213,7 +213,7 @@ it('throws an exception when the agent returns an unexpected entry', function ()
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'unknown entry [5]');
+        ->toThrow(AwardeeNameInflectionException::class, 'невідомий запис [5]');
 });
 
 it('throws an exception when the agent returns a non-numeric index', function () {
@@ -222,7 +222,7 @@ it('throws an exception when the agent returns a non-numeric index', function ()
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned an unexpected entry');
+        ->toThrow(AwardeeNameInflectionException::class, 'агент повернув неочікуваний запис');
 });
 
 it('throws an exception when the agent returns a non-string name', function () {
@@ -231,7 +231,7 @@ it('throws an exception when the agent returns a non-string name', function () {
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'the agent returned an unexpected entry');
+        ->toThrow(AwardeeNameInflectionException::class, 'агент повернув неочікуваний запис');
 });
 
 it('throws an exception when the agent returns an incomplete list', function () {
@@ -242,7 +242,7 @@ it('throws an exception when the agent returns an incomplete list', function () 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
         'Іваненко Іван Іванович',
         'Шевченко Тарас Григорович',
-    ]))->toThrow(AwardeeNameInflectionException::class, '1 of 2 names were returned');
+    ]))->toThrow(AwardeeNameInflectionException::class, 'повернуто 1 із 2');
 });
 
 it('throws an exception when the agent repeats the same index', function () {
@@ -256,7 +256,7 @@ it('throws an exception when the agent repeats the same index', function () {
     expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
         'Іваненко Іван Іванович',
         'Шевченко Тарас Григорович',
-    ]))->toThrow(AwardeeNameInflectionException::class, '1 of 2 names were returned');
+    ]))->toThrow(AwardeeNameInflectionException::class, 'повернуто 1 із 2');
 });
 
 it('throws an exception when the agent returns a blank name', function () {
@@ -265,5 +265,5 @@ it('throws an exception when the agent returns a blank name', function () {
     ]);
 
     expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'Unable to inflect the awardee name [Іваненко Іван Іванович].');
+        ->toThrow(AwardeeNameInflectionException::class, 'Не вдалося відмінити ПІБ [Іваненко Іван Іванович].');
 });

@@ -76,12 +76,12 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
         $uri = Uri::parse($url);
 
         if ($uri->getScheme() !== 'https') {
-            throw new InvalidArgumentException("Only HTTPS scheme is allowed: {$url}");
+            throw new InvalidArgumentException(__('Only HTTPS scheme is allowed: :url', ['url' => $url]));
         }
 
         $host = $uri->getHost();
         if ($host === null || ! str_ends_with(mb_strtolower($host), self::ALLOWED_HOST)) {
-            throw new InvalidArgumentException("Invalid decree URL host: {$url}");
+            throw new InvalidArgumentException(__('Invalid decree URL host: :url', ['url' => $url]));
         }
 
         return $uri->toString();
@@ -201,7 +201,7 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
 
         if (! str_contains($haystack, 'про відзначення державними нагородами')) {
             throw new DecreeParseException(
-                "Decree is not about state awards [{$decreeUrl}]."
+                __('Decree is not about state awards [:url].', ['url' => $decreeUrl])
             );
         }
     }
@@ -216,7 +216,7 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
         $number = Str::match('/№\s*([0-9]+\/[0-9]{4})/u', $normalizedHeading);
 
         if (empty($number)) {
-            throw new DecreeParseException("Unable to parse decree number [{$decreeUrl}].");
+            throw new DecreeParseException(__('Unable to parse decree number [:url].', ['url' => $decreeUrl]));
         }
 
         return $number;
@@ -228,7 +228,7 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
         $dates = Str::matchAll('/\b(\d{1,2}\s+[а-яіїєґ]+\s+\d{4}\s+року)\b/ui', Str::squish($articleBodyText));
 
         if ($dates->isEmpty()) {
-            throw new DecreeParseException("Unable to parse decree date [{$decreeUrl}].");
+            throw new DecreeParseException(__('Unable to parse decree date [:url].', ['url' => $decreeUrl]));
         }
 
         $dateLiteral = $dates->last();
@@ -240,17 +240,26 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
     {
         if (! preg_match('/^(?<day>\d{1,2})\s+(?<month>[а-яіїєґ]+)\s+(?<year>\d{4})\s+року$/ui', trim($dateLiteral),
             $parts)) {
-            throw new DecreeParseException("Unexpected decree date format [{$decreeUrl}]: {$dateLiteral}");
+            throw new DecreeParseException(__('Unexpected decree date format [:url]: :date', [
+                'url' => $decreeUrl,
+                'date' => $dateLiteral,
+            ]));
         }
 
         $month = self::UKRAINIAN_MONTHS[mb_strtolower($parts['month'])] ?? null;
 
         if ($month === null) {
-            throw new DecreeParseException("Unknown Ukrainian month [{$decreeUrl}]: {$parts['month']}");
+            throw new DecreeParseException(__('Unknown Ukrainian month [:url]: :month', [
+                'url' => $decreeUrl,
+                'month' => $parts['month'],
+            ]));
         }
 
         return CarbonImmutable::createFromFormat('!Y-n-j', "{$parts['year']}-{$month}-{$parts['day']}")
-            ?: throw new DecreeParseException("Invalid decree date value [{$decreeUrl}]: {$dateLiteral}");
+            ?: throw new DecreeParseException(__('Invalid decree date value [:url]: :date', [
+                'url' => $decreeUrl,
+                'date' => $dateLiteral,
+            ]));
     }
 
     /**
@@ -264,7 +273,7 @@ class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
         $articleBody = $document->querySelector('div[itemprop="articleBody"]');
 
         if ($articleBody === null) {
-            throw new DecreeParseException("Unable to parse decree awardees [{$decreeUrl}].");
+            throw new DecreeParseException(__('Unable to parse decree awardees [:url].', ['url' => $decreeUrl]));
         }
 
         $awardees = [];

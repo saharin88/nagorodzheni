@@ -22,11 +22,20 @@ class AwardeeResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
-    protected static ?string $navigationLabel = 'Awardees';
+    public static function getNavigationLabel(): string
+    {
+        return __('Awardees');
+    }
 
-    protected static ?string $modelLabel = 'Awardee';
+    public static function getModelLabel(): string
+    {
+        return __('Awardee');
+    }
 
-    protected static ?string $pluralModelLabel = 'Awardees';
+    public static function getPluralModelLabel(): string
+    {
+        return __('Awardees');
+    }
 
     public static function form(Schema $schema): Schema
     {

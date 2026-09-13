@@ -11,7 +11,6 @@ use Illuminate\Support\Collection;
 
 class AwardsStatsOverview extends StatsOverviewWidget
 {
-
     /**
      * @return array<Stat>
      */

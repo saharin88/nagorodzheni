@@ -21,11 +21,20 @@ class AwardResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrophy;
 
-    protected static ?string $navigationLabel = 'Awards';
+    public static function getNavigationLabel(): string
+    {
+        return __('Awards');
+    }
 
-    protected static ?string $modelLabel = 'Award';
+    public static function getModelLabel(): string
+    {
+        return __('Award');
+    }
 
-    protected static ?string $pluralModelLabel = 'Awards';
+    public static function getPluralModelLabel(): string
+    {
+        return __('Awards');
+    }
 
     public static function form(Schema $schema): Schema
     {

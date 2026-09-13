@@ -31,7 +31,7 @@ it('renders the awardees list page', function () {
 
     livewire(ListAwardees::class)
         ->assertOk()
-        ->assertActionHasLabel(CreateAction::class, 'Add awardee')
+        ->assertActionHasLabel(CreateAction::class, 'Додати нагородженого')
         ->assertCanSeeTableRecords($awardees);
 });
 
@@ -205,8 +205,8 @@ it('changes the award of the selected awardees in bulk', function () {
         ->assertNotified(
             Notification::make()
                 ->success()
-                ->title('Award changed')
-                ->body('The awardees are linked to "Орден Богдана Хмельницького" now. Updated awardees: 2'),
+                ->title('Нагороду змінено')
+                ->body('Нагороджених прив\'язано до «Орден Богдана Хмельницького». Оновлено нагороджених: 2'),
         );
 
     expect($firstAwardee->refresh()->award_id)->toBe($orderAward->getKey())
