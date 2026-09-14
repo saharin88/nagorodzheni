@@ -1,9 +1,21 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
 
-@source '../../../../app/Filament/Admin/**/*';
-@source '../../../../resources/views/filament/admin/**/*';
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
 
 
 .hide-field-error .fi-fo-field-wrp-error-message {
     display: none !important;
+}
+
+.fi-panel-user {
+    .fi-topbar-ctn {
+        @apply w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800;
+        .fi-topbar {
+            @apply max-w-7xl mx-auto bg-transparent border-none shadow-none ring-0;
+            .fi-logo {
+                margin-inline-start: calc(var(--spacing) * 4);
+            }
+        }
+    }
 }

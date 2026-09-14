@@ -1,5 +1,3 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
-
-Route::view('/', 'welcome')->name('home');
+// The project root is served by the public Filament panel (see App\Providers\Filament\UserPanelProvider).

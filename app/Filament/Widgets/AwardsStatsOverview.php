@@ -11,6 +11,8 @@ use Illuminate\Support\Collection;
 
 class AwardsStatsOverview extends StatsOverviewWidget
 {
+    protected ?string $pollingInterval = null;
+
     /**
      * @return array<Stat>
      */
