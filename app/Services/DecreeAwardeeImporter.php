@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Contracts\Contracts\DecreeAwardeeParser;
+use App\Contracts\DecreeAwardeeParser;
 use App\Models\Award;
 use App\Models\Decree;
 use Illuminate\Support\Facades\DB;

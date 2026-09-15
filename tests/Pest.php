@@ -48,3 +48,23 @@ function something()
 {
     // ..
 }
+
+/**
+ * Build the URL of a decree page of the President of Ukraine.
+ */
+function decreeUrl(string $path): string
+{
+    return "https://www.president.gov.ua/documents/{$path}";
+}
+
+/**
+ * Read one of the committed decree page fixtures.
+ */
+function decreeFixture(string $fileName): string
+{
+    $html = file_get_contents(base_path("tests/Fixtures/decrees/{$fileName}"));
+
+    expect($html)->not->toBeFalse();
+
+    return $html;
+}

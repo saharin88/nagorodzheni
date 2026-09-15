@@ -2,7 +2,7 @@
 
 namespace App\Filament\Admin\Resources\Awards\Tables;
 
-use App\Contracts\Contracts\AwardMerger;
+use App\Contracts\AwardMerger;
 use App\Filament\Admin\Resources\Awardees\AwardeeResource;
 use App\Models\Award;
 use Filament\Actions\BulkAction;

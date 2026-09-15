@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Ai\Agents\UkrainianNameInflector;
-use App\Contracts\Contracts\AwardeeNameInflector;
+use App\Contracts\AwardeeNameInflector;
 use App\Exceptions\AwardeeNameInflectionException;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 

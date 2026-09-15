@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Contracts\Contracts;
+namespace App\Contracts;
 
 use App\Services\PresidentDecreeParser;
 use Illuminate\Container\Attributes\Bind;

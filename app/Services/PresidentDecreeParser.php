@@ -2,34 +2,22 @@
 
 namespace App\Services;
 
-use App\Contracts\Contracts\DecreeAwardeeParser;
-use App\Contracts\Contracts\DecreeMetaParser;
+use App\Contracts\DecreeAwardeeParser;
+use App\Contracts\DecreeHtmlFetcher;
+use App\Contracts\DecreeMetaParser;
 use App\Exceptions\DecreeParseException;
 use Carbon\CarbonImmutable;
 use Dom\HTMLDocument;
-use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
-use Throwable;
-use Uri\Rfc3986\Uri;
 
 class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 {
-    private const string ALLOWED_HOST = 'president.gov.ua';
-
     private const array UKRAINIAN_MONTHS = [
         'січня' => 1, 'лютого' => 2, 'березня' => 3, 'квітня' => 4,
         'травня' => 5, 'червня' => 6, 'липня' => 7, 'серпня' => 8,
         'вересня' => 9, 'жовтня' => 10, 'листопада' => 11, 'грудня' => 12,
     ];
 
-    /**
-     * Звання відділене від ПІБ довгим тире, коротким тире або дефісом.
-     * Дефіс вимагає пробілів з обох боків, щоб не розрізати подвійні прізвища («КОСТЕНКО-СИДОРЕНКА»).
-     */
     private const string AWARDEE_PATTERN = '/^(?<full_name>.+?)(?:\s*\((?<is_posthumous>посмертно)\))?(?:\s*[—–]\s*|\s+-\s+)(?<rank>.+)$/u';
 
     /** @var array<string, array{number: string, date: string}> */
@@ -37,6 +25,10 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     /** @var array<string, list<array{full_name: string, rank: string, award: string, is_posthumous: bool}>> */
     private array $awardeesCache = [];
+
+    public function __construct(
+        private readonly DecreeHtmlFetcher $htmlFetcher
+    ) {}
 
     public function getDecreeNumber(string $decreeUrl): string
     {
@@ -53,11 +45,9 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     public function getAwardees(string $decreeUrl): array
     {
-        $normalizedUrl = $this->normalizeAndValidateUrl($decreeUrl);
-
-        return $this->awardeesCache[$normalizedUrl] ??= $this->parseAwardees(
-            $this->getCachedHtml($normalizedUrl),
-            $normalizedUrl,
+        return $this->awardeesCache[$decreeUrl] ??= $this->parseAwardees(
+            $this->htmlFetcher->fetchHtml($decreeUrl),
+            $decreeUrl,
         );
     }
 
@@ -66,106 +56,10 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     private function getParsedMeta(string $decreeUrl): array
     {
-        $normalizedUrl = $this->normalizeAndValidateUrl($decreeUrl);
-
-        return $this->runtimeCache[$normalizedUrl] ??= $this->parseMeta($this->getCachedHtml($normalizedUrl), $normalizedUrl);
-    }
-
-    private function normalizeAndValidateUrl(string $url): string
-    {
-        $uri = Uri::parse($url);
-
-        if ($uri->getScheme() !== 'https') {
-            throw new InvalidArgumentException(__('Only HTTPS scheme is allowed: :url', ['url' => $url]));
-        }
-
-        $host = $uri->getHost();
-        if ($host === null || ! str_ends_with(mb_strtolower($host), self::ALLOWED_HOST)) {
-            throw new InvalidArgumentException(__('Invalid decree URL host: :url', ['url' => $url]));
-        }
-
-        return $uri->toString();
-    }
-
-    private function getCachedHtml(string $decreeUrl): string
-    {
-        $htmlCachePath = $this->htmlCachePath($decreeUrl);
-
-        if (File::exists($htmlCachePath)) {
-            return File::get($htmlCachePath);
-        }
-
-        try {
-            $response = Http::withHeaders([
-                'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
-                'Accept' => 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                'Accept-Language' => 'uk-UA,uk;q=0.9,en-US;q=0.8,en;q=0.7',
-                'Cache-Control' => 'max-age=0',
-                'Connection' => 'keep-alive',
-                'Upgrade-Insecure-Requests' => '1',
-
-                'Sec-Ch-Ua' => '"Not)A;Brand";v="99", "Google Chrome";v="127", "Chromium";v="127"',
-                'Sec-Ch-Ua-Mobile' => '?0',
-                'Sec-Ch-Ua-Platform' => '"Windows"',
-                'Sec-Fetch-Dest' => 'document',
-                'Sec-Fetch-Mode' => 'navigate',
-                'Sec-Fetch-Site' => 'none',
-                'Sec-Fetch-User' => '?1',
-            ])
-                ->withOptions([
-                    'version' => 2.0,
-                ])
-                ->connectTimeout(15)
-                ->timeout(15)
-                ->retry([250, 500, 1000])
-                ->get($decreeUrl);
-
-        } catch (ConnectionException $e) {
-            throw new DecreeParseException(
-                __('Connection error while fetching the decree [:url]: :message', [
-                    'url' => $decreeUrl,
-                    'message' => $e->getMessage(),
-                ])
-            );
-        }
-
-        if ($response->status() !== 200) {
-            throw new DecreeParseException(
-                __('Unexpected decree response status [:url]: :status', [
-                    'url' => $decreeUrl,
-                    'status' => $response->status(),
-                ])
-            );
-        }
-
-        $html = $response->body();
-
-        $this->parseMeta($html, $decreeUrl);
-
-        $this->storeHtmlCache($htmlCachePath, $html, $decreeUrl);
-
-        return $html;
-    }
-
-    private function storeHtmlCache(string $htmlCachePath, string $html, string $decreeUrl): void
-    {
-        try {
-            File::ensureDirectoryExists(dirname($htmlCachePath));
-            File::put($htmlCachePath, $html);
-        } catch (Throwable $exception) {
-            Log::warning('Unable to cache decree HTML on disk.', [
-                'url' => $decreeUrl,
-                'path' => $htmlCachePath,
-                'exception' => $exception,
-            ]);
-        }
-    }
-
-    private function htmlCachePath(string $decreeUrl): string
-    {
-        $cacheToken = hash('sha256', $decreeUrl);
-
-        return storage_path("framework/cache/decrees/$cacheToken.html");
+        return $this->runtimeCache[$decreeUrl] ??= $this->parseMeta(
+            $this->htmlFetcher->fetchHtml($decreeUrl),
+            $decreeUrl
+        );
     }
 
     /**
@@ -238,8 +132,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     private function resolveUkrainianDate(string $dateLiteral, string $decreeUrl): CarbonImmutable
     {
-        if (! preg_match('/^(?<day>\d{1,2})\s+(?<month>[а-яіїєґ]+)\s+(?<year>\d{4})\s+року$/ui', trim($dateLiteral),
-            $parts)) {
+        if (! preg_match('/^(?<day>\d{1,2})\s+(?<month>[а-яіїєґ]+)\s+(?<year>\d{4})\s+року$/ui', trim($dateLiteral), $parts)) {
             throw new DecreeParseException(__('Unexpected decree date format [:url]: :date', [
                 'url' => $decreeUrl,
                 'date' => $dateLiteral,
@@ -281,7 +174,6 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
         foreach ($articleBody->querySelectorAll('p') as $paragraph) {
             $text = Str::squish($paragraph->textContent);
-
             $heading = $paragraph->querySelector('strong');
 
             if ($heading !== null && Str::squish($heading->textContent) === $text) {
@@ -301,9 +193,6 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     }
 
     /**
-     * Parse a single decree paragraph, e.g. «СИДОРА Юрія Васильовича (посмертно) — капітана»
-     * or «БРОДОВСЬКОГО Богдана Віталійовича (посмертно) - майора».
-     *
      * @return array{full_name: string, rank: string, award: string, is_posthumous: bool}|null
      */
     private function parseAwardee(string $text, string $award): ?array

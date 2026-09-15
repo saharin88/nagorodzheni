@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Contracts\Contracts\AwardMerger as AwardMergerContract;
+use App\Contracts\AwardMerger as AwardMergerContract;
 use App\Models\Award;
 use App\Models\Awardee;
 use Illuminate\Support\Collection;

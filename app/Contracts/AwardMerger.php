@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Contracts\Contracts;
+namespace App\Contracts;
 
 use App\Models\Award;
 use App\Services\AwardMerger as AwardMergerService;

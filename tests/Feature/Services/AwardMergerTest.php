@@ -1,6 +1,6 @@
 <?php
 
-use App\Contracts\Contracts\AwardMerger;
+use App\Contracts\AwardMerger;
 use App\Models\Award;
 use App\Models\Awardee;
 

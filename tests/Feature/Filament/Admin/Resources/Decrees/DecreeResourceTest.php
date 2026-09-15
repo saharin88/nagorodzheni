@@ -1,6 +1,6 @@
 <?php
 
-use App\Contracts\Contracts\DecreeMetaParser;
+use App\Contracts\DecreeMetaParser;
 use App\Exceptions\DecreeParseException;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
 use App\Models\Awardee;
