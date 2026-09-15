@@ -82,6 +82,29 @@ it('reads the decree html from the disk without asking the site again', function
     Http::assertNothingSent();
 });
 
+it('serves the decree html from the site when it is fetched fresh', function () {
+    $url = decreeUrl('8752026-61465');
+    $html = decreeFixture('875_2026.html');
+
+    Storage::disk('local')->put(decreeCachePath('875', '2026'), '<html lang="ua"><body>Cached page</body></html>');
+    Http::fake([$url => Http::response($html, 200)]);
+
+    expect(app(DecreeHtmlFetcher::class)->fetchFreshHtml($url))->toBe($html);
+
+    Http::assertSentCount(1);
+    expect(Storage::disk('local')->get(decreeCachePath('875', '2026')))->toBe('<html lang="ua"><body>Cached page</body></html>');
+});
+
+it('keeps no cache file for the page that is fetched fresh', function () {
+    $url = decreeUrl('8752026-61465');
+
+    Http::fake([$url => Http::response(decreeFixture('875_2026.html'), 200)]);
+
+    app(DecreeHtmlFetcher::class)->fetchFreshHtml($url);
+
+    Storage::disk('local')->assertMissing(decreeCachePath('875', '2026'));
+});
+
 it('reuses the cached decree html when the same decree is requested through another subdomain', function () {
     $html = decreeFixture('875_2026.html');
 

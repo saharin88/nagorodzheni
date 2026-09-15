@@ -83,15 +83,12 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
         $twitterDescription = trim((string) $document->querySelector('meta[name="twitter:description"]')?->getAttribute('content'));
         $shortDesc = trim((string) $document->querySelector('.short_desc p')?->textContent);
 
-        $haystack = [
+        $haystack = mb_strtolower(implode(' ', array_filter([
             $description,
             $ogDescription,
             $twitterDescription,
             $shortDesc,
-        ]
-                |> array_filter(...)
-                |> (fn ($x) => implode(' ', $x))
-                |> mb_strtolower(...);
+        ])));
 
         if (! str_contains($haystack, 'про відзначення державними нагородами')) {
             throw new DecreeParseException(

@@ -16,9 +16,9 @@ class CachedPresidentDecreeFetcher implements DecreeHtmlFetcher
 {
     private const string ALLOWED_HOST = 'president.gov.ua';
 
-    public function fetchHtml(string $decreeUrl): string
+    public function fetchHtml(string $url): string
     {
-        $normalizedUrl = $this->normalizeAndValidateUrl($decreeUrl);
+        $normalizedUrl = $this->normalizeAndValidateUrl($url);
         $filePath = $this->getCacheFilePath($normalizedUrl);
 
         if (Storage::disk('local')->exists($filePath)) {
@@ -30,6 +30,11 @@ class CachedPresidentDecreeFetcher implements DecreeHtmlFetcher
         $this->storeHtmlCache($filePath, $html, $normalizedUrl);
 
         return $html;
+    }
+
+    public function fetchFreshHtml(string $url): string
+    {
+        return $this->downloadHtml($this->normalizeAndValidateUrl($url));
     }
 
     private function normalizeAndValidateUrl(string $url): string
