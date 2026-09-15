@@ -5,6 +5,7 @@ namespace App\Filament\Admin\Resources\Awardees\Tables;
 use App\Filament\Admin\Resources\Decrees\DecreeResource;
 use App\Models\Award;
 use App\Models\Awardee;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -99,8 +100,10 @@ class AwardeesTable
             ])
             ->filtersFormColumns(2)
             ->recordActions([
-                EditAction::make(),
-                DeleteAction::make(),
+                ActionGroup::make([
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

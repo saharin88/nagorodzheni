@@ -15,6 +15,11 @@ class DecreesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort(function (Builder $query) {
+                return $query
+                    ->orderBy('date', 'desc')
+                    ->orderBy('number', 'desc');
+            })
             ->columns([
                 TextColumn::make('number')
                     ->label(__('Decree number'))
@@ -47,14 +52,6 @@ class DecreesTable
                     ->color('primary')
                     ->searchable()
                     ->toggleable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 SelectFilter::make('decree_year')

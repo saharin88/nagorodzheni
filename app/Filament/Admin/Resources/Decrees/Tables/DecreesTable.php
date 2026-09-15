@@ -28,6 +28,11 @@ class DecreesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort(function (Builder $query) {
+                return $query
+                    ->orderBy('date', 'desc')
+                    ->orderBy('number', 'desc');
+            })
             ->columns([
                 TextColumn::make('number')
                     ->alignCenter()
