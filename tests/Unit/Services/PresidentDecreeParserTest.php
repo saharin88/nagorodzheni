@@ -127,13 +127,13 @@ it('parses every awardee mentioned in the decree', function () {
         ->and($awardees[0])->toBe([
             'full_name' => 'Вовченка Олександра Євгеновича',
             'rank' => 'молодшого лейтенанта',
-            'award' => 'відзнакою Президента України “Хрест бойових заслуг”',
+            'award' => 'відзнакою Президента України «Хрест бойових заслуг»',
             'is_posthumous' => false,
         ])
         ->and($awardees[173])->toBe([
             'full_name' => 'Ясніковського Олега Михайловича',
             'rank' => 'старшого лейтенанта медичної служби',
-            'award' => 'медаллю “За врятоване життя”',
+            'award' => 'медаллю «За врятоване життя»',
             'is_posthumous' => false,
         ])
         ->and(collect($awardees)->where('is_posthumous', true))->toHaveCount(107)
@@ -188,10 +188,23 @@ it('parses the awardees when the rank is separated by a hyphen instead of a dash
         [
             'full_name' => 'Шапаренка Артура Юрійовича',
             'rank' => 'солдата',
-            'award' => 'медаллю “Захиснику Вітчизни”',
+            'award' => 'медаллю «Захиснику Вітчизни»',
             'is_posthumous' => false,
         ],
     ]);
+});
+
+it('normalizes the award names of a decree that writes them in another quote style', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout('875_2026.html', '/[“”]/u', '"'));
+
+    $awardNames = collect(app(DecreeAwardeeParser::class)->getAwardees($url))->pluck('award')->unique();
+
+    expect($awardNames)->toHaveCount(11)
+        ->and($awardNames->filter(fn (string $award): bool => preg_match('/["“”]/u', $award) === 1))->toBeEmpty()
+        ->and($awardNames)->toContain('відзнакою Президента України «Хрест бойових заслуг»')
+        ->and($awardNames)->toContain('медаллю «За врятоване життя»');
 });
 
 it('throws an exception when the decree is not about state awards', function () {

@@ -12,7 +12,7 @@ use InvalidArgumentException;
 use Throwable;
 use Uri\Rfc3986\Uri;
 
-class CachedPresidentDecreeFetcher implements DecreeHtmlFetcher
+class PresidentDecreeHtmlFetcher implements DecreeHtmlFetcher
 {
     private const string ALLOWED_HOST = 'president.gov.ua';
 

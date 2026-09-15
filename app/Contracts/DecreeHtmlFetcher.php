@@ -2,11 +2,11 @@
 
 namespace App\Contracts;
 
-use App\Services\CachedPresidentDecreeFetcher;
+use App\Services\PresidentDecreeHtmlFetcher;
 use Illuminate\Container\Attributes\Bind;
 use Illuminate\Container\Attributes\Singleton;
 
-#[Bind(CachedPresidentDecreeFetcher::class)]
+#[Bind(PresidentDecreeHtmlFetcher::class)]
 #[Singleton]
 interface DecreeHtmlFetcher
 {

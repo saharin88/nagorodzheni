@@ -20,6 +20,8 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     private const string AWARDEE_PATTERN = '/^(?<full_name>.+?)(?:\s*\((?<is_posthumous>посмертно)\))?(?:\s*[—–]\s*|\s+-\s+)(?<rank>.+)$/u';
 
+    private const string AWARD_QUOTE_PATTERN = '/["“”„‟«»]/u';
+
     /** @var array<string, array{number: string, date: string}> */
     private array $runtimeCache = [];
 
@@ -208,6 +210,21 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     private function normalizeAwardName(string $heading): string
     {
-        return Str::squish((string) preg_replace('/^(Нагородити|Присвоїти)\s+/u', '', $heading));
+        $awardName = Str::squish((string) preg_replace('/^(Нагородити|Присвоїти)\s+/u', '', $heading));
+
+        return $this->normalizeAwardQuotes($awardName);
+    }
+
+    private function normalizeAwardQuotes(string $awardName): string
+    {
+        $quotePosition = 0;
+
+        return (string) preg_replace_callback(
+            self::AWARD_QUOTE_PATTERN,
+            function () use (&$quotePosition): string {
+                return $quotePosition++ % 2 === 0 ? '«' : '»';
+            },
+            $awardName
+        );
     }
 }
