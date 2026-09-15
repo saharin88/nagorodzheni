@@ -2,12 +2,12 @@
 
 namespace App\Contracts\Contracts;
 
-use App\Services\PresidentDecreeMetaParser;
+use App\Services\PresidentDecreeParser;
 use Carbon\CarbonImmutable;
 use Illuminate\Container\Attributes\Bind;
 use Illuminate\Container\Attributes\Singleton;
 
-#[Bind(PresidentDecreeMetaParser::class)]
+#[Bind(PresidentDecreeParser::class)]
 #[Singleton]
 interface DecreeMetaParser
 {

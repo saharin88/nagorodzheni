@@ -16,7 +16,7 @@ use InvalidArgumentException;
 use Throwable;
 use Uri\Rfc3986\Uri;
 
-class PresidentDecreeMetaParser implements DecreeAwardeeParser, DecreeMetaParser
+class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 {
     private const string ALLOWED_HOST = 'president.gov.ua';
 
