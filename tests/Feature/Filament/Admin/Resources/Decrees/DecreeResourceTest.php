@@ -1,5 +1,6 @@
 <?php
 
+use App\Contracts\AwardDecreeSynchronizer;
 use App\Contracts\DecreeMetaParser;
 use App\Exceptions\DecreeParseException;
 use App\Filament\Admin\Resources\Decrees\Pages\ListDecrees;
@@ -134,6 +135,52 @@ it('offers the awardee import action for every decree', function () {
     livewire(ListDecrees::class)
         ->assertActionExists(TestAction::make('importAwardees')->table($decree))
         ->assertActionHasLabel(TestAction::make('importAwardees')->table($decree), 'Імпортувати нагороджених і нагороди');
+});
+
+it('offers the manual decrees sync action', function () {
+    livewire(ListDecrees::class)
+        ->assertActionExists(TestAction::make('syncDecrees'))
+        ->assertActionHasLabel(TestAction::make('syncDecrees'), __('Sync decrees'));
+});
+
+it('runs decree synchronization from the header action', function () {
+    $this->mock(AwardDecreeSynchronizer::class)
+        ->shouldReceive('sync')
+        ->once()
+        ->andReturn([
+            'added' => 2,
+            'awardees' => 174,
+            'skipped' => 0,
+        ]);
+
+    livewire(ListDecrees::class)
+        ->callAction(TestAction::make('syncDecrees'))
+        ->assertNotified(
+            Notification::make()
+                ->success()
+                ->title(__('Synchronization completed'))
+                ->body(__('New decrees: :added, Imported awardees: :awardees, Skipped decrees: :skipped', [
+                    'added' => 2,
+                    'awardees' => 174,
+                    'skipped' => 0,
+                ])),
+        );
+});
+
+it('notifies when manual decrees synchronization fails', function () {
+    $this->mock(AwardDecreeSynchronizer::class)
+        ->shouldReceive('sync')
+        ->once()
+        ->andThrow(new DecreeParseException('Decree list is empty.'));
+
+    livewire(ListDecrees::class)
+        ->callAction(TestAction::make('syncDecrees'))
+        ->assertNotified(
+            Notification::make()
+                ->danger()
+                ->title(__('Unable to synchronize decrees'))
+                ->body('Decree list is empty.'),
+        );
 });
 
 it('imports the awardees of the decree from the table action', function () {

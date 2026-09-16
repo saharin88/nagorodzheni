@@ -124,7 +124,7 @@ class DecreesTable
 
                             Notification::make()
                                 ->success()
-                                ->title(__('Awardees and awards imported'))
+                                ->title(__('Awardees imported'))
                                 ->body(__('Imported awardees: :count', ['count' => $importedAwardeesCount]))
                                 ->send();
                         }),

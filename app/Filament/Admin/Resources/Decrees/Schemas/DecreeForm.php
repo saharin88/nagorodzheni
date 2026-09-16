@@ -54,6 +54,8 @@ class DecreeForm
                                 ->requiredIfAccepted('url'),
                             Hidden::make('date')
                                 ->requiredIfAccepted('url'),
+                            Hidden::make('importAwardees')
+                                ->default(false),
                         ])
                         ->beforeValidation(function (Get $get, Set $set, DecreeMetaParser $decreeMetaParser): void {
                             $url = $get('url');
@@ -95,9 +97,20 @@ class DecreeForm
                         ]),
                 ])
                     ->submitAction(
-                        Action::make('create')
-                            ->label(__('Added'))
-                            ->submit('create')
+                        new HtmlString(
+                            '<div class="flex items-center gap-3">'
+                            .Action::make('create')
+                                ->label(__('Add decree'))
+                                ->submit('create')
+                                ->toHtml()
+                            .Action::make('createAndImportAwardees')
+                                ->label(__('Add decree and import awardees'))
+                                ->color('gray')
+                                ->callParent('callMountedAction')
+                                ->arguments(['importAwardees' => true])
+                                ->toHtml()
+                            .'</div>'
+                        )
                     )
                     ->columnSpanFull(),
             ]);
