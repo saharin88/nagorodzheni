@@ -49,7 +49,7 @@ class AwardsStatsOverview extends StatsOverviewWidget
             ->select('awards.*')
             ->selectRaw('COALESCE(awardee_counts.awardees_count, 0) AS awardees_count')
             ->selectRaw('COALESCE(awardee_counts.posthumous_awardees_count, 0) AS posthumous_awardees_count')
-            ->orderByDesc('awardees_count')
+            ->orderBy('awards.sort')
             ->orderBy('awards.name')
             ->get();
     }

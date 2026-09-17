@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  * @property-read int|null $awardees_count
  * @property-read int|null $posthumous_awardees_count
  */
-#[Fillable(['name'])]
+#[Fillable(['name', 'sort'])]
 class Award extends Model
 {
     /** @use HasFactory<AwardFactory> */

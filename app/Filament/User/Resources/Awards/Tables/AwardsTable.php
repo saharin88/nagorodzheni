@@ -14,7 +14,7 @@ class AwardsTable
     {
         return $table
             ->defaultPaginationPageOption(50)
-            ->defaultSort('name')
+            ->defaultSort('sort')
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Award name'))
@@ -36,14 +36,6 @@ class AwardsTable
                     ->alignCenter()
                     ->sortable()
                     ->toggleable(),
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
             ]);
     }
 }

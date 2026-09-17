@@ -174,3 +174,29 @@ it('refuses to merge a single selected award', function () {
 
     expect(Award::query()->whereKey($award->getKey())->exists())->toBeTrue();
 });
+
+it('sorts the awards by their sort position', function () {
+    $thirdAward = Award::factory()->create(['name' => 'Третя нагорода', 'sort' => 3]);
+    $secondAward = Award::factory()->create(['name' => 'Друга нагорода', 'sort' => 2]);
+    $firstAward = Award::factory()->create(['name' => 'Перша нагорода', 'sort' => 1]);
+
+    livewire(ListAwards::class)
+        ->assertCanSeeTableRecords([$firstAward, $secondAward, $thirdAward], inOrder: true);
+});
+
+it('persists the sort positions after reordering the awards', function () {
+    $firstAward = Award::factory()->create(['sort' => 1]);
+    $secondAward = Award::factory()->create(['sort' => 2]);
+    $thirdAward = Award::factory()->create(['sort' => 3]);
+
+    livewire(ListAwards::class)
+        ->call('reorderTable', [$thirdAward->getKey(), $firstAward->getKey(), $secondAward->getKey()])
+        ->assertHasNoErrors();
+
+    expect($thirdAward->refresh()->sort)->toBe(1)
+        ->and($firstAward->refresh()->sort)->toBe(2)
+        ->and($secondAward->refresh()->sort)->toBe(3);
+
+    livewire(ListAwards::class)
+        ->assertCanSeeTableRecords([$thirdAward, $firstAward, $secondAward], inOrder: true);
+});

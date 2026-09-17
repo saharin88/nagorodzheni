@@ -36,3 +36,24 @@ it('links the awardee count to the awardee list of the user panel', function () 
         ->toContain('/awardees')
         ->not->toContain('/admin');
 });
+
+it('sorts the awards by their sort position', function () {
+    $thirdAward = Award::factory()->create(['name' => 'Третя нагорода', 'sort' => 3]);
+    $secondAward = Award::factory()->create(['name' => 'Друга нагорода', 'sort' => 2]);
+    $firstAward = Award::factory()->create(['name' => 'Перша нагорода', 'sort' => 1]);
+
+    livewire(ListAwards::class)
+        ->assertCanSeeTableRecords([$firstAward, $secondAward, $thirdAward], inOrder: true);
+});
+
+it('does not let the visitors reorder the awards', function () {
+    $firstAward = Award::factory()->create(['sort' => 1]);
+    $secondAward = Award::factory()->create(['sort' => 2]);
+
+    livewire(ListAwards::class)
+        ->call('reorderTable', [$secondAward->getKey(), $firstAward->getKey()])
+        ->assertHasNoErrors();
+
+    expect($firstAward->refresh()->sort)->toBe(1)
+        ->and($secondAward->refresh()->sort)->toBe(2);
+});

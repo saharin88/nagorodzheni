@@ -38,16 +38,16 @@ it('shows a zero awardee count for an award nobody has received', function () {
         ->assertDontSee('посмертно');
 });
 
-it('orders the awards by the number of awardees', function () {
-    $biggestAward = Award::factory()->create(['name' => 'Герой України']);
-    $smallestAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+it('orders the awards by their sort position', function () {
+    $lastAward = Award::factory()->create(['name' => 'Герой України', 'sort' => 3]);
+    $firstAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького', 'sort' => 1]);
+    $middleAward = Award::factory()->create(['name' => 'Хрест бойових заслуг', 'sort' => 2]);
 
-    Awardee::factory()->count(2)->for($biggestAward, 'award')->create();
-    Awardee::factory()->for($smallestAward, 'award')->create();
+    Awardee::factory()->count(5)->for($lastAward, 'award')->create();
 
     livewire(AwardsStatsOverview::class)
         ->assertOk()
-        ->assertSeeInOrder(['Герой України', 'Орден Богдана Хмельницького']);
+        ->assertSeeInOrder(['Орден Богдана Хмельницького', 'Хрест бойових заслуг', 'Герой України']);
 });
 
 it('links every award to the awardees of that award', function () {
