@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
+use Collator;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -24,6 +25,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+
+        $connection = DB::connection();
+
+        if ($connection->getDriverName() === 'sqlite') {
+            $connection->getPdo()->sqliteCreateCollation('UKRAINIAN_CI', function ($string1, $string2) {
+                $collator = new Collator('uk_UA');
+
+                return $collator->compare($string1, $string2);
+            });
+        }
     }
 
     /**

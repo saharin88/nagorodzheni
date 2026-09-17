@@ -26,6 +26,7 @@ class AwardeesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->defaultSort('full_name')
             ->columns(components: [
                 TextColumn::make('rank')
                     ->label(__('Rank'))
@@ -38,7 +39,12 @@ class AwardeesTable
                 TextColumn::make('full_name')
                     ->label(__('Awardee full name'))
                     ->searchable()
-                    ->sortable(),
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        return match (strtolower($direction)) {
+                            'desc' => $query->orderByRaw('full_name COLLATE UKRAINIAN_CI desc'),
+                            default => $query->orderByRaw('full_name COLLATE UKRAINIAN_CI asc'),
+                        };
+                    }),
                 TextColumn::make('award.name')
                     ->label(__('Award'))
                     ->suffix(fn (
