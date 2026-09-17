@@ -268,3 +268,188 @@ it('throws an exception when the article body of the decree is missing', functio
     expect(fn () => app(DecreeAwardeeParser::class)->getAwardees($url))
         ->toThrow(DecreeParseException::class, 'Не вдалося розібрати нагороджених');
 });
+
+it('parses the hero decree that lists its awardees under the award heading', function () {
+    $url = decreeUrl('2642022-42217');
+
+    fakeDecreeHtml(decreeFixture('264_2022.html'));
+
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(5)
+        ->and($awardees[0])->toBe([
+            'full_name' => 'Григор’єву Олександру Олександровичу',
+            'rank' => 'полковнику',
+            'award' => 'звання Герой України',
+            'is_posthumous' => true,
+        ])
+        ->and($awardees[4])->toBe([
+            'full_name' => 'Цюрику Миколі Володимировичу',
+            'rank' => 'солдату',
+            'award' => 'звання Герой України',
+            'is_posthumous' => true,
+        ]);
+});
+
+it('parses the hero decree that keeps the award and its awardee in one paragraph', function () {
+    $url = decreeUrl('6782026-61056');
+
+    fakeDecreeHtml(decreeFixture('678_2026.html'));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
+        [
+            'full_name' => 'Грабовському Дмитру Михайловичу',
+            'rank' => 'старшому сержанту',
+            'award' => 'звання Герой України',
+            'is_posthumous' => false,
+        ],
+    ]);
+});
+
+it('marks the hero posthumously when the decree writes the marker after the rank', function () {
+    $url = decreeUrl('7762026-61121');
+
+    fakeDecreeHtml(decreeFixture('776_2026.html'));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
+        [
+            'full_name' => 'Третяку Сергію Ігоровичу',
+            'rank' => 'солдату',
+            'award' => 'звання Герой України',
+            'is_posthumous' => true,
+        ],
+    ]);
+});
+
+it('collapses every name of the Hero of Ukraine title into one award', function () {
+    $fixtures = [
+        '2642022-42217' => '264_2022.html',
+        '2942022-42389' => '294_2022.html',
+        '5662022-45967' => '566_2022.html',
+        '6782026-61056' => '678_2026.html',
+        '7762026-61121' => '776_2026.html',
+    ];
+
+    foreach ($fixtures as $path => $fileName) {
+        fakeDecreeHtml(decreeFixture($fileName));
+
+        $awardNames = collect(app(DecreeAwardeeParser::class)->getAwardees(decreeUrl($path)))
+            ->pluck('award')
+            ->unique();
+
+        expect($awardNames->all())->toBe(['звання Герой України']);
+    }
+});
+
+it('collapses the hero title written in the genitive case as well', function () {
+    $url = decreeUrl('6782026-61056');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '678_2026.html',
+        '/Присвоїти звання Герой України/u',
+        'Присвоїти звання Героя України',
+    ));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url)[0]['award'])->toBe('звання Герой України');
+});
+
+it('parses the hero decree whose award names no order', function () {
+    $url = decreeUrl('5662022-45967');
+
+    fakeDecreeHtml(decreeFixture('566_2022.html'));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
+        [
+            'full_name' => 'Мельнику Ярославу Ігоровичу',
+            'rank' => 'майору',
+            'award' => 'звання Герой України',
+            'is_posthumous' => false,
+        ],
+        [
+            'full_name' => 'Юрковському Олександру Олександровичу',
+            'rank' => 'майору',
+            'award' => 'звання Герой України',
+            'is_posthumous' => false,
+        ],
+    ]);
+});
+
+it('parses the awardee whose rank is glued to the name by a hyphen', function () {
+    $url = decreeUrl('2642022-42217');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '264_2022.html',
+        '/ГРИГОР’ЄВУ Олександру Олександровичу – полковнику/u',
+        'ГРИГОР’ЄВУ Олександру Олександровичу-полковнику',
+    ));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url)[0])->toBe([
+        'full_name' => 'Григор’єву Олександру Олександровичу',
+        'rank' => 'полковнику',
+        'award' => 'звання Герой України',
+        'is_posthumous' => true,
+    ]);
+});
+
+it('parses the awardee whose surname is hyphenated', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '875_2026.html',
+        '/СИДОРА Юрія Васильовича \(посмертно\) — капітана/u',
+        'КОСТЕНКО-СИДОРЕНКА Юрія Васильовича (посмертно) — капітана',
+    ));
+
+    expect(collect(app(DecreeAwardeeParser::class)->getAwardees($url))->firstWhere('full_name', 'Костенко-Сидоренка Юрія Васильовича'))->toBe([
+        'full_name' => 'Костенко-Сидоренка Юрія Васильовича',
+        'rank' => 'капітана',
+        'award' => 'орденом Богдана Хмельницького ІІ ступеня',
+        'is_posthumous' => true,
+    ]);
+});
+
+it('recognises the award headings that the page does not write in bold', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '875_2026.html',
+        '/<p><strong>(Нагородити|Присвоїти)(.*?)<\/strong><\/p>/su',
+        '<p>${1}${2}</p>',
+    ));
+
+    $awardNames = collect(app(DecreeAwardeeParser::class)->getAwardees($url))->pluck('award')->unique();
+
+    expect($awardNames)->toHaveCount(11)
+        ->and($awardNames)->toContain('орденом Данила Галицького');
+});
+
+it('recognises the award heading that the page splits into several bold runs', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '875_2026.html',
+        '/<strong>Нагородити орденом Данила Галицького<\/strong>/u',
+        '<strong>Нагородити орденом </strong><strong>Данила Галицького</strong>',
+    ));
+
+    expect(collect(app(DecreeAwardeeParser::class)->getAwardees($url))->pluck('award')->unique())
+        ->toContain('орденом Данила Галицького');
+});
+
+it('does not read the honorary title of a decree as an awardee', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '875_2026.html',
+        '/<p><strong>Нагородити орденом Данила Галицького<\/strong><\/p>/u',
+        '<p><strong>Нагородити орденом Данила Галицького</strong></p>'."\n"
+            .'<p><strong>Присвоїти почесне звання «ЗАСЛУЖЕНИЙ ЛІКАР УКРАЇНИ»</strong></p>',
+    ));
+
+    $awardees = collect(app(DecreeAwardeeParser::class)->getAwardees($url));
+
+    expect($awardees)->toHaveCount(174)
+        ->and($awardees->pluck('award')->unique())
+        ->toContain('почесне звання «ЗАСЛУЖЕНИЙ ЛІКАР УКРАЇНИ»')
+        ->not->toContain('почесне звання «');
+});

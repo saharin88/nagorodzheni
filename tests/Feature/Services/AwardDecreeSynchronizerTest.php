@@ -15,15 +15,18 @@ it('stores the new decrees of the list together with their awardees', function (
 
     Http::fake([decreeUrl('8752026-61465') => Http::response(decreeFixture('875_2026.html'), 200)]);
 
+    $requestedSearches = [];
+
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->once()
-        ->with(Mockery::on(function (string $url): bool {
+        ->twice()
+        ->with(Mockery::on(function (string $url) use (&$requestedSearches): bool {
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
+            $requestedSearches[] = $query['s-text'] ?? '';
+
             return str_starts_with($url, 'https://www.president.gov.ua/documents/decrees?')
-                && $query['contain-rule'] === 'contains'
-                && $query['s-text'] === __('the search text of the decree list about state awards', locale: 'uk');
+                && ($query['contain-rule'] ?? '') === 'contains';
         }))
         ->andReturn([
             [
@@ -35,6 +38,12 @@ it('stores the new decrees of the list together with their awardees', function (
     expect(app(AwardDecreeSynchronizer::class)->sync())
         ->toBe(['added' => 1, 'awardees' => 174, 'skipped' => 0]);
 
+    // A decree that both searches list is stored once.
+    expect($requestedSearches)->toBe([
+        __('the search text of the decree list about state awards', locale: 'uk'),
+        __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk'),
+    ]);
+
     $decree = Decree::query()->sole();
 
     expect($decree->number)->toBe('875/2026')
@@ -44,6 +53,34 @@ it('stores the new decrees of the list together with their awardees', function (
     $this->assertDatabaseCount('awardees', 174);
 
     Http::assertSentCount(1);
+});
+
+it('stores the decrees of both searches', function () {
+    Storage::fake('local');
+    Http::preventStrayRequests();
+
+    Http::fake([
+        decreeUrl('2642022-42217') => Http::response(decreeFixture('264_2022.html'), 200),
+        decreeUrl('8752026-61465') => Http::response(decreeFixture('875_2026.html'), 200),
+    ]);
+
+    $this->mock(AwardDecreeListParser::class)
+        ->shouldReceive('getDecrees')
+        ->twice()
+        ->andReturnUsing(function (string $url): array {
+            parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+            return ($query['s-text'] ?? '') === __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk')
+                ? [['number' => '264/2022', 'url' => decreeUrl('2642022-42217')]]
+                : [['number' => '875/2026', 'url' => decreeUrl('8752026-61465')]];
+        });
+
+    expect(app(AwardDecreeSynchronizer::class)->sync())
+        ->toBe(['added' => 2, 'awardees' => 179, 'skipped' => 0]);
+
+    expect(Decree::query()->pluck('number')->sort()->values()->all())->toBe(['264/2022', '875/2026']);
+
+    $this->assertDatabaseCount('awardees', 179);
 });
 
 it('stores nothing when every decree of the list is stored already', function () {
@@ -57,7 +94,7 @@ it('stores nothing when every decree of the list is stored already', function ()
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->once()
+        ->twice()
         ->andReturn([
             [
                 'number' => '875/2026',
@@ -97,7 +134,7 @@ it('keeps importing the remaining decrees when one of them cannot be parsed', fu
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->once()
+        ->twice()
         ->andReturn([
             [
                 'number' => '897/2026',
@@ -124,7 +161,7 @@ it('removes the decree it has just stored when its awardees cannot be imported',
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->once()
+        ->twice()
         ->andReturn([
             [
                 'number' => '875/2026',

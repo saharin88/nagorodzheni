@@ -25,12 +25,7 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
      */
     public function sync(): array
     {
-        $listUrl = $this->getDecreeListUrl();
-        $decrees = $this->listParser->getDecrees($listUrl);
-
-        if ($decrees === []) {
-            throw new DecreeParseException(__('The decree list came back empty [:url].', ['url' => $listUrl]));
-        }
+        $decrees = $this->getDecrees();
 
         $storedNumbers = Decree::query()
             ->whereIn('number', array_column($decrees, 'number'))
@@ -95,23 +90,68 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
         }
     }
 
-    private function getDecreeListUrl(): string
+    /**
+     * Collect the decrees the searches of the synchronizer list.
+     *
+     * A decree that awards the Hero of Ukraine title along with the other state
+     * awards is listed by both searches, so the lists are merged on the number.
+     *
+     * @return list<array{number: string, url: string}>
+     *
+     * @throws DecreeParseException when a decree list cannot be read
+     */
+    private function getDecrees(): array
     {
-        return 'https://www.president.gov.ua/documents/decrees?'.http_build_query([
-            's-num' => '',
-            'contain-rule' => 'contains',
-            's-text' => $this->getSearchText(),
-        ]);
+        $decrees = [];
+
+        foreach ($this->getDecreeListUrls() as $listUrl) {
+            $listed = $this->listParser->getDecrees($listUrl);
+
+            if ($listed === []) {
+                throw new DecreeParseException(__('The decree list came back empty [:url].', ['url' => $listUrl]));
+            }
+
+            foreach ($listed as $decree) {
+                $decrees[$decree['number']] ??= $decree;
+            }
+        }
+
+        return array_values($decrees);
     }
 
     /**
-     * Get the search text that keeps only the decrees about state awards.
+     * Get the decree list URL of every search the synchronizer watches.
      *
-     * The site searches its Ukrainian documents, so the phrase is always resolved
-     * in Ukrainian, whatever locale the application runs in.
+     * @return list<string>
      */
-    private function getSearchText(): string
+    private function getDecreeListUrls(): array
     {
-        return __('the search text of the decree list about state awards', locale: 'uk');
+        return array_map(
+            fn (string $searchText): string => 'https://www.president.gov.ua/documents/decrees?'.http_build_query([
+                's-num' => '',
+                'contain-rule' => 'contains',
+                's-text' => $searchText,
+            ]),
+            $this->getSearchTexts(),
+        );
+    }
+
+    /**
+     * Get the search texts that keep only the decrees about state awards.
+     *
+     * The President publishes the deeds that deserve the Hero of Ukraine title in
+     * decrees of their own, which the state awards search does not list.
+     *
+     * The site searches its Ukrainian documents, so the phrases are always resolved
+     * in Ukrainian, whatever locale the application runs in.
+     *
+     * @return list<string>
+     */
+    private function getSearchTexts(): array
+    {
+        return [
+            __('the search text of the decree list about state awards', locale: 'uk'),
+            __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk'),
+        ];
     }
 }
