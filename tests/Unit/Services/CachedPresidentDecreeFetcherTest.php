@@ -4,7 +4,6 @@ use App\Contracts\DecreeHtmlFetcher;
 use App\Exceptions\DecreeParseException;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -137,21 +136,92 @@ it('sends the headers that the decree site expects from a browser', function () 
 
     Http::assertSent(fn ($request): bool => $request->hasHeader('User-Agent')
         && $request->hasHeader('Accept-Language')
+        && $request->hasHeader('Accept-Encoding')
         && $request->hasHeader('Sec-Ch-Ua')
         && $request->hasHeader('Sec-Fetch-Mode'));
 });
 
-it('rejects only the responses the http client marks as failed', function () {
+it('rejects the response status that marks a failure after the retries', function () {
     $url = decreeUrl('8752026-61465');
 
     Http::fake([$url => Http::response('Service Unavailable', 503)]);
 
     expect(fn () => app(DecreeHtmlFetcher::class)->fetchHtml($url))
-        ->toThrow(RequestException::class);
+        ->toThrow(DecreeParseException::class, 'Неочікуваний статус відповіді указу');
 
     Storage::disk('local')->assertMissing(decreeCachePath('875', '2026'));
 
-    Http::assertSentCount(4);
+    Http::assertSentCount(3);
+});
+
+it('asks again for the page the site protection interrupted', function () {
+    $url = decreeUrl('8752026-61465');
+    $html = decreeFixture('875_2026.html');
+
+    Http::fake([
+        $url => Http::sequence()
+            ->push(decreeFixture('akamai_challenge.html'), 200)
+            ->push($html, 200),
+    ]);
+
+    expect(app(DecreeHtmlFetcher::class)->fetchHtml($url))->toBe($html);
+
+    Http::assertSentCount(2);
+    expect(Storage::disk('local')->get(decreeCachePath('875', '2026')))->toBe($html);
+});
+
+it('rejects the page the site protection keeps answering with instead of the decree', function () {
+    $url = decreeUrl('8752026-61465');
+
+    Http::fake([$url => Http::response(decreeFixture('akamai_challenge.html'), 200)]);
+
+    expect(fn () => app(DecreeHtmlFetcher::class)->fetchHtml($url))
+        ->toThrow(DecreeParseException::class, 'Замість сторінки указу надійшла відповідь захисту сайту');
+
+    Storage::disk('local')->assertMissing(decreeCachePath('875', '2026'));
+
+    Http::assertSentCount(3);
+});
+
+it('carries the cookies of the answer into the next request', function () {
+    $firstUrl = decreeUrl('8752026-61465');
+    $secondUrl = decreeUrl('8742026-61455');
+
+    Http::fake([
+        $firstUrl => Http::response(decreeFixture('875_2026.html'), 200, [
+            'Set-Cookie' => 'bm_s=protection-session; Domain=.president.gov.ua; Path=/',
+        ]),
+        $secondUrl => Http::response(decreeFixture('875_2026.html'), 200),
+    ]);
+
+    $fetcher = app(DecreeHtmlFetcher::class);
+
+    $fetcher->fetchHtml($firstUrl);
+    $fetcher->fetchHtml($secondUrl);
+
+    Http::assertSent(fn ($request): bool => $request->url() === $secondUrl
+        && $request->hasHeader('Cookie', 'bm_s=protection-session'));
+});
+
+it('keeps the cookies of the protection session between the fetcher instances', function () {
+    $firstUrl = decreeUrl('8752026-61465');
+    $secondUrl = decreeUrl('8742026-61455');
+
+    Http::fake([
+        $firstUrl => Http::response(decreeFixture('875_2026.html'), 200, [
+            'Set-Cookie' => 'bm_s=protection-session; Domain=.president.gov.ua; Path=/',
+        ]),
+        $secondUrl => Http::response(decreeFixture('875_2026.html'), 200),
+    ]);
+
+    app(DecreeHtmlFetcher::class)->fetchHtml($firstUrl);
+
+    $this->app->forgetInstance(DecreeHtmlFetcher::class);
+
+    app(DecreeHtmlFetcher::class)->fetchHtml($secondUrl);
+
+    Http::assertSent(fn ($request): bool => $request->url() === $secondUrl
+        && $request->hasHeader('Cookie', 'bm_s=protection-session'));
 });
 
 it('returns and caches the body of a status that is not a failure', function () {
@@ -184,6 +254,7 @@ it('returns the decree html even when the cache cannot be written', function () 
 
     $disk = Mockery::mock(Filesystem::class);
     $disk->shouldReceive('exists')->once()->with(decreeCachePath('875', '2026'))->andReturnFalse();
+    $disk->shouldReceive('exists')->once()->with('decrees/cookies.json')->andReturnFalse();
     $disk->shouldReceive('put')->once()->andThrow(new RuntimeException('Permission denied'));
     Storage::set('local', $disk);
 
