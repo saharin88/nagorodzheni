@@ -1,7 +1,7 @@
 <div class="flex flex-nowrap items-center gap-2 overflow-hidden w-full">
     <img
         src="{{ asset('images/logo.svg') }}"
-        alt="Logo"
+        alt="{{ __('Logo') }}"
         class="h-8 w-auto shrink-0"
     />
     <div class="flex flex-col text-left overflow-hidden">

@@ -3,6 +3,7 @@
 namespace App\Filament\Admin\Resources\Awardees\Tables;
 
 use App\Filament\Admin\Resources\Decrees\DecreeResource;
+use App\Jobs\InflectAwardeeNamesJob;
 use App\Models\Award;
 use App\Models\Awardee;
 use Filament\Actions\ActionGroup;
@@ -16,6 +17,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -45,6 +47,12 @@ class AwardeesTable
                             default => $query->orderByRaw('full_name COLLATE UKRAINIAN_CI asc'),
                         };
                     }),
+                TextColumn::make('full_name_nominative')
+                    ->label(__('Awardee full name (nominative case)'))
+                    ->placeholder('—')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('award.name')
                     ->label(__('Award'))
                     ->suffix(fn (
@@ -103,6 +111,17 @@ class AwardeesTable
                         '1' => __('Yes'),
                         '0' => __('No'),
                     ]),
+                Filter::make('missing_nominative_name')
+                    ->label(__('Missing nominative name'))
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->where(function (Builder $query) {
+                        $query->whereNull('full_name_nominative')
+                            ->orWhere('full_name_nominative', '');
+                    })),
+                Filter::make('full_name_equal_nominative')
+                    ->label(__('Full name equals nominative'))
+                    ->toggle()
+                    ->query(fn (Builder $query): Builder => $query->whereColumn('full_name', 'full_name_nominative')),
             ])
             ->filtersFormColumns(2)
             ->recordActions([
@@ -113,6 +132,27 @@ class AwardeesTable
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('fillNominativeNames')
+                        ->label(__('Fill nominative names'))
+                        ->icon(Heroicon::OutlinedLanguage)
+                        ->requiresConfirmation()
+                        ->modalHeading(__('Fill missing nominative names'))
+                        ->modalDescription(__('Run nominative names inflection for selected awardees where this field is empty?'))
+                        ->modalSubmitActionLabel(__('Fill'))
+                        ->deselectRecordsAfterCompletion()
+                        ->fetchSelectedRecords(false)
+                        ->action(function (Collection $records): void {
+                            $records->chunk(1000)
+                                ->each(function (Collection $chunk) {
+                                    InflectAwardeeNamesJob::dispatch($chunk->all());
+                                });
+
+                            Notification::make()
+                                ->success()
+                                ->title(__('Process started'))
+                                ->body(__('Nominative names are being generated in the background.'))
+                                ->send();
+                        }),
                     BulkAction::make('changeAward')
                         ->label(__('Change award'))
                         ->icon(Heroicon::OutlinedTrophy)

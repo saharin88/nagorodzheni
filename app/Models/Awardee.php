@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
  * @property int $decree_id
  * @property int $award_id
  * @property string $full_name
+ * @property string|null $full_name_nominative
  * @property string $rank
  * @property bool $is_posthumous
  * @property Carbon|null $created_at
@@ -21,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property-read Decree $decree
  * @property-read Award $award
  */
-#[Fillable(['decree_id', 'award_id', 'full_name', 'rank', 'is_posthumous'])]
+#[Fillable(['decree_id', 'award_id', 'full_name', 'full_name_nominative', 'rank', 'is_posthumous'])]
 class Awardee extends Model
 {
     /** @use HasFactory<AwardeeFactory> */

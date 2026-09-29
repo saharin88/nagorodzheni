@@ -4,6 +4,7 @@ use App\Ai\Agents\UkrainianNameInflector;
 use App\Contracts\AwardeeNameInflector;
 use App\Exceptions\AwardeeNameInflectionException;
 use Laravel\Ai\Attributes\Provider;
+use Laravel\Ai\Contracts\HasProviderOptions;
 use Laravel\Ai\Enums\Lab;
 use Laravel\Ai\Prompts\AgentPrompt;
 use Tests\TestCase;
@@ -27,25 +28,9 @@ function inflectorDeclaredLab(): Lab
     return $lab;
 }
 
-it('converts a full name to the genitive case', function () {
-    UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
-    ]);
-
-    $inflector = app(AwardeeNameInflector::class);
-
-    expect($inflector->toGenitive('Іваненко Іван Іванович'))
-        ->toBe('Іваненка Івана Івановича');
-
-    UkrainianNameInflector::assertPrompted(function (AgentPrompt $prompt): bool {
-        return $prompt->contains('Постав кожне ПІБ у родовий відмінок')
-            && $prompt->contains('1. Іваненко Іван Іванович');
-    });
-});
-
 it('restores the nominative case from a full name in the genitive case', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненко Іван Іванович']]],
+        ['names' => ['Іваненко Іван Іванович']],
     ]);
 
     $inflector = app(AwardeeNameInflector::class);
@@ -59,12 +44,12 @@ it('restores the nominative case from a full name in the genitive case', functio
     });
 });
 
-it('inflects many names with a single request', function () {
+it('restores many names with a single request', function () {
     UkrainianNameInflector::fake([
         ['names' => [
-            ['index' => 1, 'full_name' => 'Шевченко Тарас Григорович'],
-            ['index' => 2, 'full_name' => 'Ковальчук Марія Степанівна'],
-            ['index' => 3, 'full_name' => 'Іваненко Іван Іванович'],
+            'Шевченко Тарас Григорович',
+            'Ковальчук Марія Степанівна',
+            'Іваненко Іван Іванович',
         ]],
     ]);
 
@@ -75,9 +60,9 @@ it('inflects many names with a single request', function () {
         'Ковальчук Марії Степанівни',
         'Іваненка Івана Івановича',
     ]))->toBe([
-        'Шевченко Тарас Григорович',
-        'Ковальчук Марія Степанівна',
-        'Іваненко Іван Іванович',
+        'Шевченка Тараса Григоровича' => 'Шевченко Тарас Григорович',
+        'Ковальчук Марії Степанівни' => 'Ковальчук Марія Степанівна',
+        'Іваненка Івана Івановича' => 'Іваненко Іван Іванович',
     ]);
 
     UkrainianNameInflector::assertPromptedTimes(1);
@@ -87,81 +72,84 @@ it('inflects many names with a single request', function () {
     });
 });
 
-it('maps the inflected names back by their index', function () {
+it('maps every restored name to the source name it was asked about', function () {
     UkrainianNameInflector::fake([
         ['names' => [
-            ['index' => 2, 'full_name' => 'Шевченка Тараса Григоровича'],
-            ['index' => 1, 'full_name' => 'Іваненка Івана Івановича'],
+            'Іваненко Іван Іванович',
+            'Шевченко Тарас Григорович',
         ]],
     ]);
 
-    expect(app(AwardeeNameInflector::class)->toGenitiveMany([
-        'Іваненко Іван Іванович',
-        'Шевченко Тарас Григорович',
-    ]))->toBe([
+    expect(app(AwardeeNameInflector::class)->fromGenitiveMany([
         'Іваненка Івана Івановича',
         'Шевченка Тараса Григоровича',
+    ]))->toBe([
+        'Іваненка Івана Івановича' => 'Іваненко Іван Іванович',
+        'Шевченка Тараса Григоровича' => 'Шевченко Тарас Григорович',
     ]);
+
+    UkrainianNameInflector::assertPrompted(function (AgentPrompt $prompt): bool {
+        return $prompt->contains("1. Іваненка Івана Івановича\n2. Шевченка Тараса Григоровича");
+    });
 });
 
 it('sends a duplicated name to the agent only once', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['Іваненко Іван Іванович']],
     ]);
 
-    expect(app(AwardeeNameInflector::class)->toGenitiveMany([
-        'Іваненко Іван Іванович',
-        'Іваненко Іван Іванович',
+    expect(app(AwardeeNameInflector::class)->fromGenitiveMany([
+        'Іваненка Івана Івановича',
+        'Іваненка Івана Івановича',
     ]))->toBe([
-        'Іваненка Івана Івановича',
-        'Іваненка Івана Івановича',
+        'Іваненка Івана Івановича' => 'Іваненко Іван Іванович',
     ]);
 
     UkrainianNameInflector::assertPromptedTimes(1);
 
     UkrainianNameInflector::assertPrompted(function (AgentPrompt $prompt): bool {
-        return $prompt->contains('1. Іваненко Іван Іванович')
-            && ! $prompt->contains('2. Іваненко Іван Іванович');
+        return $prompt->contains('1. Іваненка Івана Івановича')
+            && ! $prompt->contains('2. Іваненка Івана Івановича');
     });
 });
 
 it('normalizes whitespace in the names before prompting the agent', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['Іваненко Іван Іванович']],
     ]);
 
-    expect(app(AwardeeNameInflector::class)->toGenitiveMany(['  Іваненко   Іван  Іванович  ']))
-        ->toBe(['Іваненка Івана Івановича']);
+    expect(app(AwardeeNameInflector::class)->fromGenitiveMany(['  Іваненка   Івана  Івановича  ']))
+        ->toBe(['Іваненка Івана Івановича' => 'Іваненко Іван Іванович']);
 
     UkrainianNameInflector::assertPrompted(function (AgentPrompt $prompt): bool {
-        return $prompt->contains('1. Іваненко Іван Іванович')
+        return $prompt->contains('1. Іваненка Івана Івановича')
             && ! $prompt->contains('  ');
     });
 });
 
 it('normalizes whitespace in the names returned by the agent', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => '  Іваненка   Івана  Івановича  ']]],
+        ['names' => ['  Іваненко   Іван  Іванович  ']],
     ]);
 
-    expect(app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toBe('Іваненка Івана Івановича');
+    expect(app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
+        ->toBe('Іваненко Іван Іванович');
 });
 
 it('skips blank names without prompting the agent for them', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['Іваненко Іван Іванович']],
     ]);
 
-    expect(app(AwardeeNameInflector::class)->toGenitiveMany(['   ', 'Іваненко Іван Іванович']))
-        ->toBe(['', 'Іваненка Івана Івановича']);
+    expect(app(AwardeeNameInflector::class)->fromGenitiveMany(['   ', 'Іваненка Івана Івановича']))
+        ->toBe(['Іваненка Івана Івановича' => 'Іваненко Іван Іванович']);
 });
 
 it('does not prompt the agent when every name is blank', function () {
     UkrainianNameInflector::fake();
 
     expect(app(AwardeeNameInflector::class)->fromGenitiveMany(['', '   ']))
-        ->toBe(['', '']);
+        ->toBe([]);
 
     UkrainianNameInflector::assertNeverPrompted();
 });
@@ -169,101 +157,96 @@ it('does not prompt the agent when every name is blank', function () {
 it('does not prompt the agent when there are no names at all', function () {
     UkrainianNameInflector::fake();
 
-    expect(app(AwardeeNameInflector::class)->toGenitiveMany([]))->toBe([])
-        ->and(app(AwardeeNameInflector::class)->fromGenitiveMany([]))->toBe([]);
+    expect(app(AwardeeNameInflector::class)->fromGenitiveMany([]))->toBe([]);
 
     UkrainianNameInflector::assertNeverPrompted();
 });
 
-it('inflects the names with the provider declared by the agent', function () {
+it('restores the names with the provider declared by the agent', function () {
     $resolvedProvider = null;
 
     UkrainianNameInflector::fake(function ($prompt, $attachments, $provider, $model) use (&$resolvedProvider) {
         $resolvedProvider = $provider;
 
-        return ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]];
+        return ['names' => ['Іваненко Іван Іванович']];
     });
 
-    expect(app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toBe('Іваненка Івана Івановича');
+    expect(app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
+        ->toBe('Іваненко Іван Іванович');
 
     expect($resolvedProvider)->not->toBeNull()
         ->and($resolvedProvider->driver())->toBe(inflectorDeclaredLab()->value);
 });
 
+it('disables the reasoning that DeepSeek would bill as output tokens', function () {
+    $agent = new UkrainianNameInflector;
+
+    expect($agent)->toBeInstanceOf(HasProviderOptions::class)
+        ->and($agent->providerOptions(Lab::DeepSeek))->toBe([
+            'thinking' => ['type' => 'disabled'],
+            'max_tokens' => 131072,
+        ]);
+});
+
 it('throws an exception when the agent returns no names', function () {
     UkrainianNameInflector::fake([[]]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
         ->toThrow(AwardeeNameInflectionException::class, 'агент не повернув жодного ПІБ');
 });
 
 it('throws an exception when the agent returns names that are not a list', function () {
     UkrainianNameInflector::fake([
-        ['names' => 'Іваненка Івана Івановича'],
+        ['names' => 'Іваненко Іван Іванович'],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
         ->toThrow(AwardeeNameInflectionException::class, 'агент не повернув жодного ПІБ');
 });
 
 it('throws an exception when the agent returns an unexpected entry', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 5, 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['перший' => 'Іваненко Іван Іванович']],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'невідомий запис [5]');
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
+        ->toThrow(AwardeeNameInflectionException::class, 'агент повернув неочікуваний запис');
 });
 
-it('throws an exception when the agent returns a non-numeric index', function () {
+it('throws an exception when the agent returns more names than requested', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 'перший', 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['Іваненко Іван Іванович', 'Шевченко Тарас Григорович']],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'агент повернув неочікуваний запис');
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
+        ->toThrow(AwardeeNameInflectionException::class, 'повернуто 2 із 1');
 });
 
 it('throws an exception when the agent returns a non-string name', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => null]]],
+        ['names' => [null]],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
         ->toThrow(AwardeeNameInflectionException::class, 'агент повернув неочікуваний запис');
 });
 
 it('throws an exception when the agent returns an incomplete list', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => 'Іваненка Івана Івановича']]],
+        ['names' => ['Іваненко Іван Іванович']],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
-        'Іваненко Іван Іванович',
-        'Шевченко Тарас Григорович',
-    ]))->toThrow(AwardeeNameInflectionException::class, 'повернуто 1 із 2');
-});
-
-it('throws an exception when the agent repeats the same index', function () {
-    UkrainianNameInflector::fake([
-        ['names' => [
-            ['index' => 1, 'full_name' => 'Іваненка Івана Івановича'],
-            ['index' => 1, 'full_name' => 'Шевченка Тараса Григоровича'],
-        ]],
-    ]);
-
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitiveMany([
-        'Іваненко Іван Іванович',
-        'Шевченко Тарас Григорович',
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitiveMany([
+        'Іваненка Івана Івановича',
+        'Шевченка Тараса Григоровича',
     ]))->toThrow(AwardeeNameInflectionException::class, 'повернуто 1 із 2');
 });
 
 it('throws an exception when the agent returns a blank name', function () {
     UkrainianNameInflector::fake([
-        ['names' => [['index' => 1, 'full_name' => '   ']]],
+        ['names' => ['   ']],
     ]);
 
-    expect(fn () => app(AwardeeNameInflector::class)->toGenitive('Іваненко Іван Іванович'))
-        ->toThrow(AwardeeNameInflectionException::class, 'Не вдалося відмінити ПІБ [Іваненко Іван Іванович].');
+    expect(fn () => app(AwardeeNameInflector::class)->fromGenitive('Іваненка Івана Івановича'))
+        ->toThrow(AwardeeNameInflectionException::class, 'Не вдалося відмінити ПІБ [Іваненка Івана Івановича].');
 });

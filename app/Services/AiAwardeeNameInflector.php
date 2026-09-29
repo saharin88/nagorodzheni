@@ -9,88 +9,67 @@ use Laravel\Ai\Responses\StructuredAgentResponse;
 
 class AiAwardeeNameInflector implements AwardeeNameInflector
 {
-    private const string TO_GENITIVE_INSTRUCTION = 'Постав кожне ПІБ у родовий відмінок (кого? чого?).';
-
     private const string FROM_GENITIVE_INSTRUCTION = 'Постав кожне ПІБ у називний відмінок (хто? що?).';
 
     public function __construct(private readonly UkrainianNameInflector $agent) {}
 
-    public function toGenitive(string $fullName): string
-    {
-        return $this->toGenitiveMany([$fullName])[0];
-    }
-
     public function fromGenitive(string $genitiveFullName): string
     {
-        return $this->fromGenitiveMany([$genitiveFullName])[0];
-    }
+        $normalizedFullName = $this->normalizeFullName($genitiveFullName);
 
-    public function toGenitiveMany(array $fullNames): array
-    {
-        return $this->inflectMany($fullNames, self::TO_GENITIVE_INSTRUCTION);
-    }
+        if ($normalizedFullName === '') {
+            return '';
+        }
 
-    public function fromGenitiveMany(array $genitiveFullNames): array
-    {
-        return $this->inflectMany($genitiveFullNames, self::FROM_GENITIVE_INSTRUCTION);
+        return $this->fromGenitiveMany([$normalizedFullName])[$normalizedFullName] ?? '';
     }
 
     /**
-     * Inflect every given name with a single agent request.
-     *
-     * @param  list<string>  $fullNames
-     * @return list<string>
+     * @param  list<string>  $genitiveFullNames
+     * @return array<string, string>
      */
-    private function inflectMany(array $fullNames, string $instruction): array
+    public function fromGenitiveMany(array $genitiveFullNames): array
     {
-        $normalizedNames = array_map($this->normalizeFullName(...), $fullNames);
-
+        $normalizedNames = array_map($this->normalizeFullName(...), $genitiveFullNames);
         $uniqueNames = $this->uniqueNames($normalizedNames);
 
         if ($uniqueNames === []) {
-            return $normalizedNames;
+            return [];
         }
 
-        $inflectedNames = $this->requestInflectedNames($instruction, $uniqueNames);
-
-        return array_map(
-            fn (string $fullName): string => $inflectedNames[$fullName] ?? '',
-            $normalizedNames,
-        );
+        return $this->requestNominativeNames($uniqueNames);
     }
 
     /**
      * Get the distinct names that should be sent to the agent, keeping their order.
      *
-     * @param  list<string>  $fullNames
+     * @param  list<string>  $genitiveFullNames
      * @return list<string>
      */
-    private function uniqueNames(array $fullNames): array
+    private function uniqueNames(array $genitiveFullNames): array
     {
         $uniqueNames = [];
         $seenNames = [];
 
-        foreach ($fullNames as $fullName) {
-            if ($fullName === '' || isset($seenNames[$fullName])) {
+        foreach ($genitiveFullNames as $genitiveFullName) {
+            if ($genitiveFullName === '' || isset($seenNames[$genitiveFullName])) {
                 continue;
             }
 
-            $seenNames[$fullName] = true;
-            $uniqueNames[] = $fullName;
+            $seenNames[$genitiveFullName] = true;
+            $uniqueNames[] = $genitiveFullName;
         }
 
         return $uniqueNames;
     }
 
     /**
-     * Inflect the given names, mapping every source name to its inflected form.
-     *
      * @param  list<string>  $uniqueNames
      * @return array<string, string>
      */
-    private function requestInflectedNames(string $instruction, array $uniqueNames): array
+    private function requestNominativeNames(array $uniqueNames): array
     {
-        $response = $this->agent->prompt($instruction.PHP_EOL.PHP_EOL.$this->numberedList($uniqueNames));
+        $response = $this->agent->prompt(self::FROM_GENITIVE_INSTRUCTION.PHP_EOL.PHP_EOL.$this->numberedList($uniqueNames));
 
         $entries = $response instanceof StructuredAgentResponse
             ? data_get($response->toArray(), 'names')
@@ -102,47 +81,44 @@ class AiAwardeeNameInflector implements AwardeeNameInflector
             );
         }
 
-        $inflectedNames = [];
-
-        foreach ($entries as $entry) {
-            $index = data_get($entry, 'index');
-            $fullName = data_get($entry, 'full_name');
-
-            if (! is_numeric($index) || ! is_string($fullName)) {
-                throw new AwardeeNameInflectionException(
-                    __('Unable to inflect the awardee names: the agent returned an unexpected entry.')
-                );
-            }
-
-            $sourceName = $uniqueNames[(int) $index - 1] ?? null;
-
-            if ($sourceName === null) {
-                throw new AwardeeNameInflectionException(
-                    __('Unable to inflect the awardee names: the agent returned an unknown entry [:index].', ['index' => $index])
-                );
-            }
-
-            $inflectedName = $this->normalizeFullName($fullName);
-
-            if ($inflectedName === '') {
-                throw new AwardeeNameInflectionException(
-                    __('Unable to inflect the awardee name [:name].', ['name' => $sourceName])
-                );
-            }
-
-            $inflectedNames[$sourceName] = $inflectedName;
+        if (! array_is_list($entries)) {
+            throw new AwardeeNameInflectionException(
+                __('Unable to inflect the awardee names: the agent returned an unexpected entry.')
+            );
         }
 
-        if (count($inflectedNames) !== count($uniqueNames)) {
+        if (count($entries) !== count($uniqueNames)) {
             throw new AwardeeNameInflectionException(
                 __('Unable to inflect the awardee names: :returned of :expected names were returned.', [
-                    'returned' => count($inflectedNames),
+                    'returned' => count($entries),
                     'expected' => count($uniqueNames),
                 ])
             );
         }
 
-        return $inflectedNames;
+        $nominativeNames = [];
+
+        foreach ($entries as $position => $fullName) {
+            $sourceName = $uniqueNames[$position];
+
+            if (! is_string($fullName)) {
+                throw new AwardeeNameInflectionException(
+                    __('Unable to inflect the awardee names: the agent returned an unexpected entry.')
+                );
+            }
+
+            $nominativeName = $this->normalizeFullName($fullName);
+
+            if ($nominativeName === '') {
+                throw new AwardeeNameInflectionException(
+                    __('Unable to inflect the awardee name [:name].', ['name' => $sourceName])
+                );
+            }
+
+            $nominativeNames[$sourceName] = $nominativeName;
+        }
+
+        return $nominativeNames;
     }
 
     /**
