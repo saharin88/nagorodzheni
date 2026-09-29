@@ -4,10 +4,16 @@ use App\Contracts\AwardDecreeListParser;
 use App\Contracts\AwardDecreeSynchronizer;
 use App\Contracts\DecreeAwardeeParser;
 use App\Exceptions\DecreeParseException;
+use App\Jobs\InflectAwardeeNamesJob;
 use App\Models\Decree;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+
+beforeEach(function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
+});
 
 it('stores the new decrees of the list together with their awardees', function () {
     Storage::fake('local');
@@ -51,6 +57,14 @@ it('stores the new decrees of the list together with their awardees', function (
         ->and($decree->url)->toBe(decreeUrl('8752026-61465'));
 
     $this->assertDatabaseCount('awardees', 174);
+    Queue::assertPushed(InflectAwardeeNamesJob::class, function (InflectAwardeeNamesJob $job) use ($decree): bool {
+        $decreeAwardeeIds = $decree->awardees()->pluck('id')->all();
+
+        sort($job->awardeeIds);
+        sort($decreeAwardeeIds);
+
+        return $job->awardeeIds === $decreeAwardeeIds;
+    });
 
     Http::assertSentCount(1);
 });
@@ -106,6 +120,7 @@ it('stores nothing when every decree of the list is stored already', function ()
         ->toBe(['added' => 0, 'awardees' => 0, 'skipped' => 0]);
 
     Http::assertNothingSent();
+    Queue::assertNotPushed(InflectAwardeeNamesJob::class);
 
     $this->assertDatabaseCount('decrees', 1);
     $this->assertDatabaseCount('awardees', 0);

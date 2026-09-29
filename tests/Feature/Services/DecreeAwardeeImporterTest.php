@@ -2,11 +2,13 @@
 
 use App\Contracts\DecreeAwardeeParser;
 use App\Exceptions\DecreeParseException;
+use App\Jobs\InflectAwardeeNamesJob;
 use App\Models\Award;
 use App\Models\Awardee;
 use App\Models\Decree;
 use App\Services\DecreeAwardeeImporter;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 
 /**
  * The parser hands the names over in the genitive case, exactly as the decree writes them.
@@ -33,6 +35,7 @@ function parsedAwardees(): array
 
 it('imports the awardees of the decree with their awards', function () {
     $decree = Decree::factory()->create(['url' => 'https://www.president.gov.ua/documents/8752026-61465']);
+    Queue::fake([InflectAwardeeNamesJob::class]);
 
     $this->mock(DecreeAwardeeParser::class)
         ->shouldReceive('getAwardees')
@@ -61,10 +64,19 @@ it('imports the awardees of the decree with their awards', function () {
     ]);
     $this->assertDatabaseCount('awardees', 2);
     $this->assertDatabaseCount('awards', 2);
+    Queue::assertPushed(InflectAwardeeNamesJob::class, function (InflectAwardeeNamesJob $job) use ($decree): bool {
+        $decreeAwardeeIds = $decree->awardees()->pluck('id')->all();
+
+        sort($job->awardeeIds);
+        sort($decreeAwardeeIds);
+
+        return $job->awardeeIds === $decreeAwardeeIds;
+    });
 });
 
 it('keeps the decree awardees when the import runs twice', function () {
     $decree = Decree::factory()->create();
+    Queue::fake([InflectAwardeeNamesJob::class]);
 
     $this->mock(DecreeAwardeeParser::class)
         ->shouldReceive('getAwardees')
@@ -78,10 +90,12 @@ it('keeps the decree awardees when the import runs twice', function () {
 
     $this->assertDatabaseCount('awardees', 2);
     $this->assertDatabaseCount('awards', 2);
+    Queue::assertPushed(InflectAwardeeNamesJob::class, 2);
 });
 
 it('imports nothing when the decree mentions no awardees', function () {
     $decree = Decree::factory()->create();
+    Queue::fake([InflectAwardeeNamesJob::class]);
 
     $this->mock(DecreeAwardeeParser::class)
         ->shouldReceive('getAwardees')
@@ -93,11 +107,13 @@ it('imports nothing when the decree mentions no awardees', function () {
 
     $this->assertDatabaseCount('awardees', 0);
     $this->assertDatabaseCount('awards', 0);
+    Queue::assertNotPushed(InflectAwardeeNamesJob::class);
 });
 
 it('reuses the award that another decree already introduced', function () {
     $firstDecree = Decree::factory()->create();
     $secondDecree = Decree::factory()->create();
+    Queue::fake([InflectAwardeeNamesJob::class]);
 
     $this->mock(DecreeAwardeeParser::class)
         ->shouldReceive('getAwardees')
@@ -115,6 +131,7 @@ it('reuses the award that another decree already introduced', function () {
         ->and($sharedAward->awardees()->count())->toBe(2);
 
     $this->assertDatabaseCount('awardees', 4);
+    Queue::assertPushed(InflectAwardeeNamesJob::class, 2);
 });
 
 it('stores nothing when one of the awardees cannot be imported', function () {

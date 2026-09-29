@@ -16,6 +16,9 @@ class AwardeeForm
                     ->label(__('Awardee full name'))
                     ->required()
                     ->maxLength(255),
+                TextInput::make('full_name_nominative')
+                    ->label(__('Awardee full name (nominative case)'))
+                    ->maxLength(255),
                 TextInput::make('rank')
                     ->label(__('Rank'))
                     ->required()

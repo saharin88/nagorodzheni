@@ -10,23 +10,13 @@ use Illuminate\Container\Attributes\Singleton;
 #[Singleton]
 interface AwardeeNameInflector
 {
-    public function toGenitive(string $fullName): string;
-
     public function fromGenitive(string $genitiveFullName): string;
 
     /**
-     * Inflect many names in a single request.
-     *
-     * @param  list<string>  $fullNames
-     * @return list<string>
-     */
-    public function toGenitiveMany(array $fullNames): array;
-
-    /**
-     * Restore many names in a single request.
+     * Restore the nominative form of many awardee names in a single request.
      *
      * @param  list<string>  $genitiveFullNames
-     * @return list<string>
+     * @return array<string, string>
      */
     public function fromGenitiveMany(array $genitiveFullNames): array;
 }

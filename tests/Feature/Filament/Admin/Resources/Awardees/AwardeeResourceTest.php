@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Admin\Resources\Awardees\Pages\ListAwardees;
+use App\Jobs\InflectAwardeeNamesJob;
 use App\Models\Award;
 use App\Models\Awardee;
 use App\Models\Decree;
@@ -10,6 +11,7 @@ use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Tables\Filters\SelectFilter;
+use Illuminate\Support\Facades\Queue;
 
 use function Pest\Livewire\livewire;
 
@@ -33,6 +35,12 @@ it('renders the awardees list page', function () {
         ->assertOk()
         ->assertActionHasLabel(CreateAction::class, 'Додати нагородженого')
         ->assertCanSeeTableRecords($awardees);
+});
+
+it('offers the nominative names filling action', function () {
+    livewire(ListAwardees::class)
+        ->assertTableBulkActionExists('fillNominativeNames')
+        ->assertTableBulkActionHasLabel('fillNominativeNames', __('Fill nominative names'));
 });
 
 it('lists awards with their decree numbers in the table', function () {
@@ -120,6 +128,7 @@ it('creates an awardee from the form', function () {
         ->mountAction(CreateAction::class)
         ->fillForm([
             'full_name' => 'Сидоренко Сидір Сидорович',
+            'full_name_nominative' => 'Сидоренко Сидір Сидорович',
             'rank' => 'полковник',
             'decree_id' => $decree->getKey(),
             'award_id' => $award->getKey(),
@@ -129,6 +138,7 @@ it('creates an awardee from the form', function () {
 
     $this->assertDatabaseHas('awardees', [
         'full_name' => 'Сидоренко Сидір Сидорович',
+        'full_name_nominative' => 'Сидоренко Сидір Сидорович',
         'rank' => 'полковник',
         'decree_id' => $decree->getKey(),
         'award_id' => $award->getKey(),
@@ -163,6 +173,7 @@ it('does not register separate create and edit pages', function () {
 it('edits an awardee from the modal table action', function () {
     $awardee = Awardee::factory()->create([
         'full_name' => 'Іваненко Іван Іванович',
+        'full_name_nominative' => 'Іваненко Іван Іванович',
         'rank' => 'капітан',
     ]);
 
@@ -171,6 +182,7 @@ it('edits an awardee from the modal table action', function () {
             TestAction::make('edit')->table($awardee),
             data: [
                 'full_name' => 'Іваненко Іван Петрович',
+                'full_name_nominative' => 'Іваненко Іван Петрович',
                 'rank' => 'майор',
             ],
         )
@@ -179,7 +191,44 @@ it('edits an awardee from the modal table action', function () {
     $awardee->refresh();
 
     expect($awardee->full_name)->toBe('Іваненко Іван Петрович')
+        ->and($awardee->full_name_nominative)->toBe('Іваненко Іван Петрович')
         ->and($awardee->rank)->toBe('майор');
+});
+
+it('queues the nominative names filling for the selected awardees', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
+
+    $firstAwardee = Awardee::factory()->create([
+        'full_name' => 'Іваненка Івана Івановича',
+        'full_name_nominative' => null,
+    ]);
+    $secondAwardee = Awardee::factory()->create([
+        'full_name' => 'Петренка Петра Петровича',
+        'full_name_nominative' => null,
+    ]);
+    $alreadyFilledAwardee = Awardee::factory()->create([
+        'full_name' => 'Шевченка Тараса Григоровича',
+        'full_name_nominative' => 'Шевченко Тарас Григорович',
+    ]);
+
+    livewire(ListAwardees::class)
+        ->callTableBulkAction('fillNominativeNames', [$firstAwardee, $secondAwardee, $alreadyFilledAwardee])
+        ->assertNotified(
+            Notification::make()
+                ->success()
+                ->title('Обробку розпочато')
+                ->body('ПІБ у називному відмінку буде згенеровано у фоновому режимі.'),
+        );
+
+    Queue::assertPushed(InflectAwardeeNamesJob::class, function (InflectAwardeeNamesJob $job) use ($firstAwardee, $secondAwardee, $alreadyFilledAwardee): bool {
+        $dispatchedAwardeeIds = $job->awardeeIds;
+        $selectedAwardeeIds = [$firstAwardee->getKey(), $secondAwardee->getKey(), $alreadyFilledAwardee->getKey()];
+
+        sort($dispatchedAwardeeIds);
+        sort($selectedAwardeeIds);
+
+        return $dispatchedAwardeeIds === $selectedAwardeeIds;
+    });
 });
 
 it('deletes an awardee from the table', function () {
