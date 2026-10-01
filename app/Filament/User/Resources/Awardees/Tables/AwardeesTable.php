@@ -33,6 +33,12 @@ class AwardeesTable
                             default => $query->orderByRaw('full_name COLLATE UKRAINIAN_CI asc'),
                         };
                     }),
+                TextColumn::make('full_name_nominative')
+                    ->label(__('Awardee full name (nominative case)'))
+                    ->placeholder('—')
+                    ->searchable()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('award.name')
                     ->label(__('Award'))
                     ->suffix(fn (
