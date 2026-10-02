@@ -77,6 +77,7 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
         ], [
             'date' => $this->metaParser->getDecreeDate($decreeUrl),
             'url' => $decreeUrl,
+            'is_hero' => $this->metaParser->isHeroDecree($decreeUrl),
         ]);
 
         try {

@@ -54,7 +54,8 @@ it('stores the new decrees of the list together with their awardees', function (
 
     expect($decree->number)->toBe('875/2026')
         ->and($decree->date->toDateString())->toBe('2026-09-04')
-        ->and($decree->url)->toBe(decreeUrl('8752026-61465'));
+        ->and($decree->url)->toBe(decreeUrl('8752026-61465'))
+        ->and($decree->is_hero)->toBeFalse();
 
     $this->assertDatabaseCount('awardees', 174);
     Queue::assertPushed(InflectAwardeeNamesJob::class, function (InflectAwardeeNamesJob $job) use ($decree): bool {
@@ -93,6 +94,9 @@ it('stores the decrees of both searches', function () {
         ->toBe(['added' => 2, 'awardees' => 179, 'skipped' => 0]);
 
     expect(Decree::query()->pluck('number')->sort()->values()->all())->toBe(['264/2022', '875/2026']);
+
+    expect(Decree::query()->where('number', '264/2022')->sole()->is_hero)->toBeTrue()
+        ->and(Decree::query()->where('number', '875/2026')->sole()->is_hero)->toBeFalse();
 
     $this->assertDatabaseCount('awardees', 179);
 });

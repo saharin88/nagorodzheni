@@ -14,4 +14,6 @@ interface DecreeMetaParser
     public function getDecreeNumber(string $decreeUrl): string;
 
     public function getDecreeDate(string $decreeUrl): CarbonImmutable;
+
+    public function isHeroDecree(string $decreeUrl): bool;
 }

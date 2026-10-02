@@ -54,6 +54,8 @@ class DecreeForm
                                 ->requiredIfAccepted('url'),
                             Hidden::make('date')
                                 ->requiredIfAccepted('url'),
+                            Hidden::make('is_hero')
+                                ->default(false),
                             Hidden::make('importAwardees')
                                 ->default(false),
                         ])
@@ -66,6 +68,7 @@ class DecreeForm
                             try {
                                 $set('number', $decreeMetaParser->getDecreeNumber($url));
                                 $set('date', $decreeMetaParser->getDecreeDate($url)->toDateString());
+                                $set('is_hero', $decreeMetaParser->isHeroDecree($url));
                             } catch (InvalidArgumentException|RequestException|DecreeParseException $exception) {
                                 Log::error('Failed to parse decree meta', [
                                     'url' => $url,

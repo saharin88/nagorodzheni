@@ -53,7 +53,59 @@ it('parses the meta of the decree whose rank is separated by a hyphen', function
     $parser = app(DecreeMetaParser::class);
 
     expect($parser->getDecreeNumber($url))->toBe('371/2021')
-        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2021-05-18');
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2021-08-18');
+});
+
+it('tells the decree that confers the Hero of Ukraine title from the other award decrees', function () {
+    $fixtures = [
+        decreeUrl('2642022-42217') => '264_2022.html',
+        decreeUrl('2942022-42389') => '294_2022.html',
+        decreeUrl('5662022-45967') => '566_2022.html',
+        decreeUrl('6782026-61056') => '678_2026.html',
+        decreeUrl('7762026-61121') => '776_2026.html',
+        decreeUrl('3712021-39725') => '371_2021.html',
+        decreeUrl('8752026-61465') => '875_2026.html',
+    ];
+
+    $fetcher = Mockery::mock(DecreeHtmlFetcher::class);
+    $fetcher->shouldReceive('fetchHtml')
+        ->andReturnUsing(fn (string $url): string => decreeFixture($fixtures[$url]));
+
+    app()->instance(DecreeHtmlFetcher::class, $fetcher);
+
+    $parser = app(DecreeMetaParser::class);
+
+    expect($parser->isHeroDecree(decreeUrl('2642022-42217')))->toBeTrue()
+        ->and($parser->isHeroDecree(decreeUrl('2942022-42389')))->toBeTrue()
+        ->and($parser->isHeroDecree(decreeUrl('5662022-45967')))->toBeTrue()
+        ->and($parser->isHeroDecree(decreeUrl('6782026-61056')))->toBeTrue()
+        ->and($parser->isHeroDecree(decreeUrl('7762026-61121')))->toBeTrue()
+        ->and($parser->isHeroDecree(decreeUrl('3712021-39725')))->toBeFalse()
+        ->and($parser->isHeroDecree(decreeUrl('8752026-61465')))->toBeFalse();
+});
+
+it('does not read the decree about aid to the heroes as a hero decree', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(str_replace(
+        'Про відзначення державними нагородами України',
+        'Про одноразову адресну допомогу особам, яким присвоєно звання Герой України за здійснення визначного геройського вчинку',
+        decreeFixture('875_2026.html')
+    ));
+
+    expect(app(DecreeMetaParser::class)->isHeroDecree($url))->toBeFalse();
+});
+
+it('reads the hero decree whose description mistypes the conferral word', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(str_replace(
+        'Про відзначення державними нагородами України',
+        'Про присвосння Ю.Ілляшенку звання Герой України',
+        decreeFixture('875_2026.html')
+    ));
+
+    expect(app(DecreeMetaParser::class)->isHeroDecree($url))->toBeTrue();
 });
 
 it('falls back to the page title when the decree heading is missing', function () {
@@ -160,38 +212,34 @@ it('parses the awardees when the rank is separated by a hyphen instead of a dash
 
     fakeDecreeHtml(decreeFixture('371_2021.html'));
 
-    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
-        [
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(22)
+        ->and($awardees[0])->toBe([
             'full_name' => 'Бродовського Богдана Віталійовича',
             'rank' => 'майора',
             'award' => 'орденом Богдана Хмельницького III ступеня',
             'is_posthumous' => true,
-        ],
-        [
-            'full_name' => 'Костенко-Сидоренка Юрія Петровича',
-            'rank' => 'капітана',
+        ])
+        ->and($awardees[1])->toBe([
+            'full_name' => 'Письменного Юрія Васильовича',
+            'rank' => 'капітана медичної служби',
             'award' => 'орденом Богдана Хмельницького III ступеня',
-            'is_posthumous' => false,
-        ],
-        [
-            'full_name' => 'Шартаву Давіда',
-            'rank' => 'старшого солдата',
-            'award' => 'орденом Богдана Хмельницького III ступеня',
-            'is_posthumous' => false,
-        ],
-        [
-            'full_name' => 'Коваленка Петра Івановича',
-            'rank' => 'полковника',
-            'award' => 'звання Герой України',
             'is_posthumous' => true,
-        ],
-        [
+        ])
+        ->and($awardees[21])->toBe([
             'full_name' => 'Шапаренка Артура Юрійовича',
             'rank' => 'солдата',
             'award' => 'медаллю «Захиснику Вітчизни»',
             'is_posthumous' => false,
-        ],
-    ]);
+        ])
+        ->and(collect($awardees)->where('is_posthumous', true))->toHaveCount(7)
+        ->and(collect($awardees)->pluck('award')->unique()->values()->all())->toBe([
+            'орденом Богдана Хмельницького III ступеня',
+            'орденом «За мужність» III ступеня',
+            'медаллю «За військову службу Україні»',
+            'медаллю «Захиснику Вітчизни»',
+        ]);
 });
 
 it('normalizes the award names of a decree that writes them in another quote style', function () {

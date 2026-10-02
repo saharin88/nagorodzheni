@@ -31,3 +31,16 @@ it('counts the awardees of every decree', function () {
     livewire(ListDecrees::class)
         ->assertTableColumnStateSet('awardees_count', 3, $decree);
 });
+
+it('filters the decrees that confer the Hero of Ukraine title', function () {
+    $heroDecree = Decree::factory()->create(['is_hero' => true]);
+    $awardDecree = Decree::factory()->create(['is_hero' => false]);
+
+    livewire(ListDecrees::class)
+        ->filterTable('is_hero', true)
+        ->assertCanSeeTableRecords([$heroDecree])
+        ->assertCanNotSeeTableRecords([$awardDecree])
+        ->filterTable('is_hero', false)
+        ->assertCanSeeTableRecords([$awardDecree])
+        ->assertCanNotSeeTableRecords([$heroDecree]);
+});

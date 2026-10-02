@@ -14,12 +14,13 @@ use Illuminate\Support\Carbon;
  * @property string $number
  * @property Carbon $date
  * @property string $url
+ * @property bool $is_hero
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $awardees_count
  * @property-read int|null $posthumous_awardees_count
  */
-#[Fillable(['number', 'date', 'url'])]
+#[Fillable(['number', 'date', 'url', 'is_hero'])]
 class Decree extends Model
 {
     /** @use HasFactory<DecreeFactory> */
@@ -42,6 +43,7 @@ class Decree extends Model
     {
         return [
             'date' => 'date',
+            'is_hero' => 'boolean',
         ];
     }
 }
