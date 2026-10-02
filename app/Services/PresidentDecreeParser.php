@@ -67,11 +67,36 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     private const string HERO_OF_UKRAINE_AWARD_PATTERN = '/^звання Геро[яй] України(?!\p{L})/u';
 
+    /**
+     * The phrases the decree page uses to name the subject of the decree.
+     *
+     * The state awards phrase is written as "Про відзначення державними нагородами
+     * України", while a decree that confers the Hero of Ukraine title names the title
+     * itself, as in "Про присвоєння звання Герой України".
+     */
+    private const string STATE_AWARDS_DESCRIPTION_MARKER = 'ПРО ВІДЗНАЧЕННЯ ДЕРЖАВНИМИ НАГОРОДАМИ';
+
+    private const string HERO_OF_UKRAINE_DESCRIPTION_MARKER = 'ЗВАННЯ ГЕРОЙ УКРАЇНИ';
+
+    /**
+     * The noun the description of a decree that confers the title is built around,
+     * as in "Про присвоєння звання Герой України".
+     *
+     * The site mistypes the word from time to time ("присвосння"), so the vowel
+     * before the doubled "н" is optional. The doubled "н" itself is required: a
+     * decree about aid to the heroes names the title with the participle instead
+     * ("особам, яким присвоєно звання Герой України") and does not confer it.
+     */
+    private const string HERO_OF_UKRAINE_CONFERRAL_PATTERN = '/ПРИСВО[ЄЕС]?НН/u';
+
     /** @var array<string, array{number: string, date: string}> */
     private array $runtimeCache = [];
 
     /** @var array<string, list<array{full_name: string, rank: string, award: string, is_posthumous: bool}>> */
     private array $awardeesCache = [];
+
+    /** @var array<string, string> */
+    private array $descriptionCache = [];
 
     public function __construct(
         private readonly DecreeHtmlFetcher $htmlFetcher
@@ -85,6 +110,21 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     public function getDecreeDate(string $decreeUrl): CarbonImmutable
     {
         return CarbonImmutable::parse($this->getParsedMeta($decreeUrl)['date']);
+    }
+
+    public function isHeroDecree(string $decreeUrl): bool
+    {
+        $haystack = $this->getDescriptionHaystack($decreeUrl);
+
+        return str_contains($haystack, self::HERO_OF_UKRAINE_DESCRIPTION_MARKER)
+            && preg_match(self::HERO_OF_UKRAINE_CONFERRAL_PATTERN, $haystack) === 1;
+    }
+
+    private function getDescriptionHaystack(string $decreeUrl): string
+    {
+        return $this->descriptionCache[$decreeUrl] ??= $this->buildDescriptionHaystack(
+            HTMLDocument::createFromString($this->htmlFetcher->fetchHtml($decreeUrl)),
+        );
     }
 
     /**
@@ -125,26 +165,31 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
     private function assertAwardDecree(HTMLDocument $document, string $decreeUrl): void
     {
-        $description = trim((string) $document->querySelector('meta[name="description"]')?->getAttribute('content'));
-        $ogDescription = trim((string) $document->querySelector('meta[property="og:description"]')?->getAttribute('content'));
-        $twitterDescription = trim((string) $document->querySelector('meta[name="twitter:description"]')?->getAttribute('content'));
-        $shortDesc = trim((string) $document->querySelector('.short_desc p')?->textContent);
-
-        $haystack = mb_strtoupper(implode(' ', array_filter([
-            $description,
-            $ogDescription,
-            $twitterDescription,
-            $shortDesc,
-        ])));
+        $haystack = $this->buildDescriptionHaystack($document);
 
         if (
-            ! str_contains($haystack, 'ПРО ВІДЗНАЧЕННЯ ДЕРЖАВНИМИ НАГОРОДАМИ')
-            && ! str_contains($haystack, 'ЗВАННЯ ГЕРОЙ УКРАЇНИ')
+            ! str_contains($haystack, self::STATE_AWARDS_DESCRIPTION_MARKER)
+            && ! str_contains($haystack, self::HERO_OF_UKRAINE_DESCRIPTION_MARKER)
         ) {
             throw new DecreeParseException(
                 __('Decree is not about state awards [:url].', ['url' => $decreeUrl])
             );
         }
+    }
+
+    private function buildDescriptionHaystack(HTMLDocument $document): string
+    {
+        $description = trim((string) $document->querySelector('meta[name="description"]')?->getAttribute('content'));
+        $ogDescription = trim((string) $document->querySelector('meta[property="og:description"]')?->getAttribute('content'));
+        $twitterDescription = trim((string) $document->querySelector('meta[name="twitter:description"]')?->getAttribute('content'));
+        $shortDesc = trim((string) $document->querySelector('.short_desc p')?->textContent);
+
+        return mb_strtoupper(implode(' ', array_filter([
+            $description,
+            $ogDescription,
+            $twitterDescription,
+            $shortDesc,
+        ])));
     }
 
     private function parseDecreeNumber(HTMLDocument $document, string $decreeUrl): string

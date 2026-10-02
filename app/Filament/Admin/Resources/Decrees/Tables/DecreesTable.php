@@ -13,9 +13,11 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\IconPosition;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Client\RequestException;
@@ -36,7 +38,13 @@ class DecreesTable
             ->columns([
                 TextColumn::make('number')
                     ->alignCenter()
-                    ->searchable(),
+                    ->searchable()
+                    ->icon(fn (Decree $record): ?Heroicon => $record->is_hero ? Heroicon::Star : null)
+                    ->iconColor('warning')
+                    ->iconPosition(IconPosition::After)
+                    ->tooltip(fn (Decree $record): array|string|null => $record->is_hero
+                        ? __('Decree about conferring the Hero of Ukraine title')
+                        : null),
                 TextColumn::make('date')
                     ->alignCenter()
                     ->date()
@@ -57,7 +65,9 @@ class DecreesTable
                         'decree' => [$record->getKey()],
                     ]) : null)
                     ->suffix(fn (Decree $record): string => $record->posthumous_awardees_count > 0
-                        ? ' '.__('(:count posthumous)', ['count' => $record->posthumous_awardees_count])
+                        ? ' '.($record->posthumous_awardees_count < $record->awardees_count
+                            ? __('(:count posthumous)', ['count' => $record->posthumous_awardees_count])
+                            : __('(posthumous)'))
                         : '')
                     ->alignCenter()
                     ->color('primary')
@@ -94,6 +104,9 @@ class DecreesTable
                             "{$year}-12-31 23:59:59",
                         ])
                     )),
+                TernaryFilter::make('is_hero')
+                    ->label(__('Hero of Ukraine title'))
+                    ->placeholder(__('All decrees')),
             ])
             ->recordActions([
                 ActionGroup::make([

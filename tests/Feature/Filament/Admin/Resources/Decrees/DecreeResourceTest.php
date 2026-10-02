@@ -72,6 +72,10 @@ it('creates a decree from the form', function () {
         ->once()
         ->with($url)
         ->andReturn(CarbonImmutable::parse('2026-09-04'));
+    $decreeMetaParser->shouldReceive('isHeroDecree')
+        ->once()
+        ->with($url)
+        ->andReturn(false);
 
     $this->app->instance(DecreeMetaParser::class, $decreeMetaParser);
 
@@ -87,8 +91,40 @@ it('creates a decree from the form', function () {
     $this->assertDatabaseHas('decrees', [
         'number' => '875/2026',
         'url' => $url,
+        'is_hero' => false,
     ]);
     expect(Decree::query()->where('number', '875/2026')->firstOrFail()->date->toDateString())->toBe('2026-09-04');
+});
+
+it('marks a manually created hero decree', function () {
+    $url = 'https://www.president.gov.ua/documents/2642022-42217';
+
+    $decreeMetaParser = Mockery::mock(DecreeMetaParser::class);
+    $decreeMetaParser->shouldReceive('getDecreeNumber')
+        ->once()
+        ->with($url)
+        ->andReturn('264/2022');
+    $decreeMetaParser->shouldReceive('getDecreeDate')
+        ->once()
+        ->with($url)
+        ->andReturn(CarbonImmutable::parse('2022-04-13'));
+    $decreeMetaParser->shouldReceive('isHeroDecree')
+        ->once()
+        ->with($url)
+        ->andReturn(true);
+
+    $this->app->instance(DecreeMetaParser::class, $decreeMetaParser);
+
+    livewire(ListDecrees::class)
+        ->mountAction(CreateAction::class)
+        ->fillForm([
+            'url' => $url,
+        ])
+        ->goToNextWizardStep()
+        ->callMountedAction()
+        ->assertHasNoFormErrors();
+
+    expect(Decree::query()->where('number', '264/2022')->sole()->is_hero)->toBeTrue();
 });
 
 it('validates decree form fields on create', function () {
@@ -127,6 +163,39 @@ it('counts the awardees of every decree and separates the posthumous ones', func
         ->assertTableColumnStateSet('awardees_count', 3, $decree)
         ->assertTableColumnFormattedStateSet('awardees_count', '3 (1 посмертно)', $decree)
         ->assertTableColumnFormattedStateSet('awardees_count', 1, $decreeWithoutPosthumousAwardees);
+});
+
+it('marks the hero decrees with a star next to the number', function () {
+    $heroDecree = Decree::factory()->create([
+        'number' => '264/2022',
+        'is_hero' => true,
+    ]);
+
+    livewire(ListDecrees::class)
+        ->assertSeeHtml('M11.48 3.499a.562.562');
+});
+
+it('does not mark the state award decrees with a star', function () {
+    Decree::factory()->create([
+        'number' => '875/2026',
+        'is_hero' => false,
+    ]);
+
+    livewire(ListDecrees::class)
+        ->assertDontSeeHtml('M11.48 3.499a.562.562');
+});
+
+it('filters the decrees that confer the Hero of Ukraine title', function () {
+    $heroDecree = Decree::factory()->create(['is_hero' => true]);
+    $awardDecree = Decree::factory()->create(['is_hero' => false]);
+
+    livewire(ListDecrees::class)
+        ->filterTable('is_hero', true)
+        ->assertCanSeeTableRecords([$heroDecree])
+        ->assertCanNotSeeTableRecords([$awardDecree])
+        ->filterTable('is_hero', false)
+        ->assertCanSeeTableRecords([$awardDecree])
+        ->assertCanNotSeeTableRecords([$heroDecree]);
 });
 
 it('offers the awardee import action for every decree', function () {
