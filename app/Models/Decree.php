@@ -4,10 +4,13 @@ namespace App\Models;
 
 use Database\Factories\DecreeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * @property int $id
@@ -32,6 +35,38 @@ class Decree extends Model
     public function awardees(): HasMany
     {
         return $this->hasMany(Awardee::class);
+    }
+
+    /**
+     * Order the decrees by the year and the ordinal encoded in the number column.
+     *
+     * The column is a string ("997/2026"), so a plain `orderBy` sorts it lexicographically
+     * and places "1000/2026" after "997/2026". The year is compared first, because decree
+     * numbering restarts every year.
+     *
+     * @param  Builder<Decree>  $query
+     */
+    #[Scope]
+    protected function orderByNumber(Builder $query, string $direction = 'desc'): void
+    {
+        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+        [$yearExpression, $ordinalExpression] = match (DB::connection()->getDriverName()) {
+            'sqlite' => [
+                "CAST(substr(number, instr(number || '/', '/') + 1) AS INTEGER)",
+                "CAST(substr(number, 1, instr(number || '/', '/') - 1) AS INTEGER)",
+            ],
+            'pgsql' => [
+                "CAST(NULLIF(split_part(number, '/', 2), '') AS INTEGER)",
+                "CAST(NULLIF(split_part(number, '/', 1), '') AS INTEGER)",
+            ],
+            default => [
+                "CAST(SUBSTRING_INDEX(number, '/', -1) AS UNSIGNED)",
+                "CAST(SUBSTRING_INDEX(number, '/', 1) AS UNSIGNED)",
+            ],
+        };
+
+        $query->orderByRaw("{$yearExpression} {$direction}, {$ordinalExpression} {$direction}");
     }
 
     /**
