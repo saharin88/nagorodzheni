@@ -60,6 +60,22 @@ it('sorts the decrees by date', function () {
         ->assertCanSeeTableRecords([$olderDecree, $newerDecree], inOrder: true);
 });
 
+it('sorts the decrees of the same date by the numeric part of the number', function () {
+    $lowerNumberDecree = Decree::factory()->create([
+        'number' => '997/2026',
+        'date' => '2026-10-01',
+        'url' => 'https://example.com/997-2026',
+    ]);
+    $higherNumberDecree = Decree::factory()->create([
+        'number' => '1000/2026',
+        'date' => '2026-10-01',
+        'url' => 'https://example.com/1000-2026',
+    ]);
+
+    livewire(ListDecrees::class)
+        ->assertCanSeeTableRecords([$higherNumberDecree, $lowerNumberDecree], inOrder: true);
+});
+
 it('creates a decree from the form', function () {
     $url = 'https://www.president.gov.ua/documents/8752026-61465';
 

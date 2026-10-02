@@ -30,10 +30,11 @@ class DecreesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort(function (Builder $query) {
-                return $query
-                    ->orderBy('date', 'desc')
-                    ->orderBy('number', 'desc');
+            ->defaultSort(function (Builder $query): Builder {
+                /** @var Builder<Decree> $query */
+                $query->orderBy('date', 'desc')->orderByNumber('desc');
+
+                return $query;
             })
             ->columns([
                 TextColumn::make('number')
