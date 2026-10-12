@@ -18,12 +18,7 @@ class DecreesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort(function (Builder $query): Builder {
-                /** @var Builder<Decree> $query */
-                $query->orderBy('date', 'desc')->orderByNumber('desc');
-
-                return $query;
-            })
+            ->defaultSort('date', 'desc')
             ->columns([
                 TextColumn::make('number')
                     ->label(__('Decree number'))
@@ -39,7 +34,14 @@ class DecreesTable
                     ->label(__('Decree date'))
                     ->alignCenter()
                     ->date()
-                    ->sortable(),
+                    ->sortable(query: function (Builder $query, string $direction): Builder {
+                        $direction = strtolower($direction) === 'asc' ? 'asc' : 'desc';
+
+                        /** @var Builder<Decree> $query */
+                        $query->orderBy("DATE(date) {$direction}")->orderByNumber($direction);
+
+                        return $query;
+                    }),
                 TextColumn::make('awardees_count')
                     ->label(__('Awardees'))
                     ->counts([
