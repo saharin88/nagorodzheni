@@ -13,7 +13,10 @@ use Filament\Actions\CreateAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
+use Filament\Support\Enums\IconSize;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 
 use function Pest\Livewire\livewire;
 
@@ -60,7 +63,7 @@ it('sorts the decrees by date', function () {
         ->assertCanSeeTableRecords([$olderDecree, $newerDecree], inOrder: true);
 });
 
-it('sorts the decrees of the same date by the numeric part of the number', function () {
+it('sorts the decree numbers of the same date in the direction of the date sort', function () {
     $lowerNumberDecree = Decree::factory()->create([
         'number' => '997/2026',
         'date' => '2026-10-01',
@@ -73,6 +76,10 @@ it('sorts the decrees of the same date by the numeric part of the number', funct
     ]);
 
     livewire(ListDecrees::class)
+        ->assertCanSeeTableRecords([$higherNumberDecree, $lowerNumberDecree], inOrder: true)
+        ->sortTable('date', 'asc')
+        ->assertCanSeeTableRecords([$lowerNumberDecree, $higherNumberDecree], inOrder: true)
+        ->sortTable('date', 'desc')
         ->assertCanSeeTableRecords([$higherNumberDecree, $lowerNumberDecree], inOrder: true);
 });
 
@@ -182,23 +189,50 @@ it('counts the awardees of every decree and separates the posthumous ones', func
 });
 
 it('marks the hero decrees with a star next to the number', function () {
-    $heroDecree = Decree::factory()->create([
-        'number' => '264/2022',
-        'is_hero' => true,
+    $heroDecrees = Decree::factory()->createMany([
+        [
+            'number' => '264/2022',
+            'date' => '2022-04-13',
+            'is_hero' => true,
+        ],
+        [
+            'number' => '367/2022',
+            'date' => '2022-05-27',
+            'is_hero' => true,
+        ],
     ]);
 
-    livewire(ListDecrees::class)
-        ->assertSeeHtml('M11.48 3.499a.562.562');
+    $tableHtml = livewire(ListDecrees::class)->html();
+
+    foreach ($heroDecrees as $heroDecree) {
+        expect(decreeNumberCellHtml($tableHtml, $heroDecree))->toContain(starIconPath());
+    }
 });
 
 it('does not mark the state award decrees with a star', function () {
-    Decree::factory()->create([
-        'number' => '875/2026',
-        'is_hero' => false,
+    $heroDecrees = Decree::factory()->count(2)->create(['is_hero' => true]);
+
+    $awardDecrees = Decree::factory()->createMany([
+        [
+            'number' => '875/2026',
+            'date' => '2026-09-04',
+            'is_hero' => false,
+        ],
+        [
+            'number' => '876/2026',
+            'date' => '2026-09-05',
+            'is_hero' => false,
+        ],
     ]);
 
-    livewire(ListDecrees::class)
-        ->assertDontSeeHtml('M11.48 3.499a.562.562');
+    $tableHtml = livewire(ListDecrees::class)->html();
+
+    foreach ($awardDecrees as $awardDecree) {
+        expect(decreeNumberCellHtml($tableHtml, $awardDecree))->not->toContain('<svg');
+    }
+
+    // The star is rendered for the hero decrees only, one per hero decree.
+    expect(substr_count($tableHtml, starIconPath()))->toBe($heroDecrees->count());
 });
 
 it('filters the decrees that confer the Hero of Ukraine title', function () {
@@ -304,3 +338,29 @@ it('notifies when the awardees of the decree cannot be imported', function () {
                 ->body('Decree is not about state awards.'),
         );
 });
+
+/**
+ * Extract the markup of the number cell of the given decree row from the rendered decrees table.
+ */
+function decreeNumberCellHtml(string $tableHtml, Decree $decree): string
+{
+    $cellStart = strpos($tableHtml, ".table.record.{$decree->getKey()}.column.number");
+
+    expect($cellStart)->not->toBeFalse("The number cell of the decree {$decree->number} was not rendered.");
+
+    return Str::before(substr($tableHtml, $cellStart), '</td>');
+}
+
+/**
+ * Get the SVG path of the star icon the decrees table marks the hero decrees with.
+ */
+function starIconPath(): string
+{
+    $starIcon = svg(Heroicon::Star->getIconForSize(IconSize::Small))->toHtml();
+
+    preg_match('/\sd="([^"]+)"/', $starIcon, $matches);
+
+    expect($matches)->toHaveKey(1);
+
+    return $matches[1];
+}

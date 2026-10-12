@@ -17,7 +17,7 @@ it('translates the admin panel resource labels', function () {
 });
 
 it('translates the nominative names interface of the awardees table', function () {
-    expect(__('Awardee full name (nominative case)'))->toBe('ПІБ нагородженого (називний відмінок)')
+    expect(__('Awardee full name (nominative case)'))->toBe('ПІБ (називний відмінок ШІ)')
         ->and(__('Missing nominative name'))->toBe('Відсутній ПІБ у називному відмінку')
         ->and(__('Full name equals nominative'))->toBe('ПІБ збігається з називним відмінком')
         ->and(__('Fill nominative names'))->toBe('Заповнити ПІБ у називному відмінку')
