@@ -18,6 +18,7 @@ class DecreesTable
     public static function configure(Table $table): Table
     {
         return $table
+            ->searchPlaceholder(__('Decree number'))
             ->defaultSort('date', 'desc')
             ->columns([
                 TextColumn::make('number')
@@ -29,7 +30,8 @@ class DecreesTable
                     ->iconPosition(IconPosition::After)
                     ->tooltip(fn (Decree $record): array|string|null => $record->is_hero
                         ? __('Decree about conferring the Hero of Ukraine title')
-                        : null),
+                        : null)
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->where('number', $search)),
                 TextColumn::make('date')
                     ->label(__('Decree date'))
                     ->alignCenter()
@@ -64,7 +66,6 @@ class DecreesTable
                     ->label(__('Decree URL'))
                     ->url(fn (string $state): string => $state, shouldOpenInNewTab: true)
                     ->color('primary')
-                    ->searchable()
                     ->toggleable(),
             ])
             ->filters([
