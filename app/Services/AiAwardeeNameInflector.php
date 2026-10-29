@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Ai\Agents\UkrainianNameInflector;
 use App\Contracts\AwardeeNameInflector;
 use App\Exceptions\AwardeeNameInflectionException;
+use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\StructuredAgentResponse;
 
 class AiAwardeeNameInflector implements AwardeeNameInflector
@@ -69,6 +70,7 @@ class AiAwardeeNameInflector implements AwardeeNameInflector
      */
     private function requestNominativeNames(array $uniqueNames): array
     {
+        /** @var StructuredAgentResponse|AgentResponse $response */
         $response = $this->agent->prompt(self::FROM_GENITIVE_INSTRUCTION.PHP_EOL.PHP_EOL.$this->numberedList($uniqueNames));
 
         $entries = $response instanceof StructuredAgentResponse

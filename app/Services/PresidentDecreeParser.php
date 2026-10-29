@@ -89,6 +89,39 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     private const string HERO_OF_UKRAINE_CONFERRAL_PATTERN = '/ПРИСВО[ЄЕС]?НН/u';
 
+    /**
+     * The description of a decree that confers honorary titles names them, as in
+     * "Про присвоєння почесних звань працівникам ...".
+     *
+     * An honorary title is a state award as well, so such decrees are imported
+     * along with the decrees about orders and medals. The site mistypes the
+     * conferral word from time to time, so the vowel before the doubled "н" is
+     * optional here too.
+     */
+    private const string HONORARY_TITLE_DESCRIPTION_PATTERN = '/ПРИСВО[ЄЕС]?НН\p{L}*\s+ПОЧЕСН/u';
+
+    /**
+     * The paragraph that opens the list of honorary titles rather than naming one,
+     * as in "Присвоїти почесні звання:", or names the single title of the decree
+     * in the same sentence, as in `Присвоїти почесне звання “Заслужений юрист
+     * України”`.
+     *
+     * The system records every honorary title under the single award named by this
+     * paragraph, so the titles themselves are never award names.
+     */
+    private const string HONORARY_TITLE_GROUP_PATTERN = '/^почесн\p{L}*\s+званн\p{L}*(?:\s+[«“„"”‟][^«»“”„‟"]*[»“”„"‟])?$/u';
+
+    /**
+     * A decree that confers honorary titles writes every title in quotes on a line
+     * of its own, as in "«НАРОДНИЙ АРТИСТ УКРАЇНИ»", and the awardees follow it.
+     * The line names no awardee, so it is skipped. The site types the quotes
+     * differently from page to page, so every style the decrees use is accepted.
+     */
+    private const string HONORARY_TITLE_HEADING_PATTERN = '/^[«“„"”‟][^«»“”„‟"]+[»“”„"‟]\s*[:.]?$/u';
+
+    /** The single award every honorary title is recorded under. */
+    private const string HONORARY_TITLE_AWARD = 'почесне звання';
+
     /** @var array<string, array{number: string, date: string}> */
     private array $runtimeCache = [];
 
@@ -170,6 +203,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
         if (
             ! str_contains($haystack, self::STATE_AWARDS_DESCRIPTION_MARKER)
             && ! str_contains($haystack, self::HERO_OF_UKRAINE_DESCRIPTION_MARKER)
+            && preg_match(self::HONORARY_TITLE_DESCRIPTION_PATTERN, $haystack) !== 1
         ) {
             throw new DecreeParseException(
                 __('Decree is not about state awards [:url].', ['url' => $decreeUrl])
@@ -263,6 +297,8 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
 
         $awardees = [];
         $award = '';
+        $hasAwardStarted = false;
+        $isHonoraryTitleSection = false;
 
         foreach ($articleBody->querySelectorAll('p') as $paragraph) {
             $text = Str::squish($paragraph->textContent);
@@ -271,11 +307,24 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
                 continue;
             }
 
-            $awardParagraph = $this->parseAwardParagraph($text);
-            $awardeeText = $text;
+            $isHonoraryTitleHeading = $isHonoraryTitleSection && $this->isHonoraryTitleHeading($text);
 
-            if ($awardParagraph !== null) {
+            if ($isHonoraryTitleHeading) {
+                continue;
+            }
+
+            $awardParagraph = $this->parseAwardParagraph($text);
+
+            if ($awardParagraph === null) {
+                if (! $hasAwardStarted) {
+                    continue;
+                }
+
+                $awardeeText = $text;
+            } else {
+                $hasAwardStarted = true;
                 $award = $awardParagraph['award'];
+                $isHonoraryTitleSection = $award === self::HONORARY_TITLE_AWARD;
                 $awardeeText = $awardParagraph['awardee'] ?? '';
 
                 if ($awardeeText === '') {
@@ -321,6 +370,17 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
             'award' => $this->normalizeAwardName($inline['award']),
             'awardee' => $inline['awardee'],
         ];
+    }
+
+    /**
+     * Tell whether the paragraph names one of the honorary titles of the decree.
+     *
+     * The system records every honorary title under the single "почесне звання"
+     * award, so the title line only has to be kept from passing for an awardee.
+     */
+    private function isHonoraryTitleHeading(string $text): bool
+    {
+        return preg_match(self::HONORARY_TITLE_HEADING_PATTERN, $text) === 1;
     }
 
     /**
@@ -413,8 +473,14 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     {
         $awardName = Str::squish((string) preg_replace('/^(Нагородити|Присвоїти)\s+/u', '', $awardText));
 
+        $awardName = rtrim($awardName, ': ');
+
         if (preg_match(self::HERO_OF_UKRAINE_AWARD_PATTERN, $awardName) === 1) {
             return self::HERO_OF_UKRAINE_AWARD;
+        }
+
+        if (preg_match(self::HONORARY_TITLE_GROUP_PATTERN, $awardName) === 1) {
+            return self::HONORARY_TITLE_AWARD;
         }
 
         return $this->normalizeAwardQuotes($awardName);

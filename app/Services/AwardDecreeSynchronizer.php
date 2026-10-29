@@ -143,6 +143,9 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
      * The President publishes the deeds that deserve the Hero of Ukraine title in
      * decrees of their own, which the state awards search does not list.
      *
+     * An honorary title is a state award too, and the decrees about it name the
+     * titles either in the plural or in the singular, so both forms are searched.
+     *
      * The site searches its Ukrainian documents, so the phrases are always resolved
      * in Ukrainian, whatever locale the application runs in.
      *
@@ -153,6 +156,8 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
         return [
             __('the search text of the decree list about state awards', locale: 'uk'),
             __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk'),
+            __('the search text of the decree list about honorary titles', locale: 'uk'),
+            __('the search text of the decree list about an honorary title', locale: 'uk'),
         ];
     }
 }
