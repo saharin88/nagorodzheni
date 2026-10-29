@@ -25,7 +25,7 @@ it('stores the new decrees of the list together with their awardees', function (
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->twice()
+        ->times(4)
         ->with(Mockery::on(function (string $url) use (&$requestedSearches): bool {
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
@@ -44,10 +44,12 @@ it('stores the new decrees of the list together with their awardees', function (
     expect(app(AwardDecreeSynchronizer::class)->sync())
         ->toBe(['added' => 1, 'awardees' => 174, 'skipped' => 0]);
 
-    // A decree that both searches list is stored once.
+    // A decree that several searches list is stored once.
     expect($requestedSearches)->toBe([
         __('the search text of the decree list about state awards', locale: 'uk'),
         __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk'),
+        __('the search text of the decree list about honorary titles', locale: 'uk'),
+        __('the search text of the decree list about an honorary title', locale: 'uk'),
     ]);
 
     $decree = Decree::query()->sole();
@@ -70,7 +72,7 @@ it('stores the new decrees of the list together with their awardees', function (
     Http::assertSentCount(1);
 });
 
-it('stores the decrees of both searches', function () {
+it('stores the decrees of every search', function () {
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -81,7 +83,7 @@ it('stores the decrees of both searches', function () {
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->twice()
+        ->times(4)
         ->andReturnUsing(function (string $url): array {
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
@@ -112,7 +114,7 @@ it('stores nothing when every decree of the list is stored already', function ()
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->twice()
+        ->times(4)
         ->andReturn([
             [
                 'number' => '875/2026',
@@ -153,7 +155,7 @@ it('keeps importing the remaining decrees when one of them cannot be parsed', fu
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->twice()
+        ->times(4)
         ->andReturn([
             [
                 'number' => '897/2026',
@@ -180,7 +182,7 @@ it('removes the decree it has just stored when its awardees cannot be imported',
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->twice()
+        ->times(4)
         ->andReturn([
             [
                 'number' => '875/2026',

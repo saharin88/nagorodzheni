@@ -489,15 +489,95 @@ it('does not read the honorary title of a decree as an awardee', function () {
 
     fakeDecreeHtml(decreeFixtureWithout(
         '875_2026.html',
-        '/<p><strong>Нагородити орденом Данила Галицького<\/strong><\/p>/u',
-        '<p><strong>Нагородити орденом Данила Галицького</strong></p>'."\n"
-            .'<p><strong>Присвоїти почесне звання «ЗАСЛУЖЕНИЙ ЛІКАР УКРАЇНИ»</strong></p>',
+        '/<p><strong>Президент України В\.ЗЕЛЕНСЬКИЙ<\/strong><\/p>/u',
+        '<p><strong>Присвоїти почесне звання «ЗАСЛУЖЕНИЙ ЛІКАР УКРАЇНИ»</strong></p>'
+            .'<p>ГАЙНУ Олександру Петровичу — полковнику</p>'
+            .'<p><strong>Президент України В.ЗЕЛЕНСЬКИЙ</strong></p>',
     ));
 
     $awardees = collect(app(DecreeAwardeeParser::class)->getAwardees($url));
 
-    expect($awardees)->toHaveCount(174)
+    expect($awardees)->toHaveCount(175)
         ->and($awardees->pluck('award')->unique())
-        ->toContain('почесне звання «ЗАСЛУЖЕНИЙ ЛІКАР УКРАЇНИ»')
+        ->toContain('почесне звання')
         ->not->toContain('почесне звання «');
+});
+
+it('parses the meta of the decree that confers honorary titles', function () {
+    $url = decreeUrl('10742026-62253');
+
+    fakeDecreeHtml(decreeFixture('1074_2026.html'));
+
+    $parser = app(DecreeMetaParser::class);
+
+    expect($parser->getDecreeNumber($url))->toBe('1074/2026')
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-10-29')
+        ->and($parser->isHeroDecree($url))->toBeFalse();
+});
+
+it('parses the decree that confers honorary titles', function () {
+    $url = decreeUrl('10742026-62253');
+
+    fakeDecreeHtml(decreeFixture('1074_2026.html'));
+
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(16)
+        ->and($awardees[0])->toBe([
+            'full_name' => 'Лунченку Євгену Миколайовичу',
+            'rank' => 'акторові',
+            'award' => 'почесне звання',
+            'is_posthumous' => false,
+        ])
+        ->and($awardees[15])->toBe([
+            'full_name' => 'Ратушному Олександру Васильовичу',
+            'rank' => 'художникові-бутафору, начальникові відділу',
+            'award' => 'почесне звання',
+            'is_posthumous' => false,
+        ]);
+});
+
+it('records every honorary title of the decree under the single honorary title award', function () {
+    $url = decreeUrl('10742026-62253');
+
+    fakeDecreeHtml(decreeFixture('1074_2026.html'));
+
+    expect(collect(app(DecreeAwardeeParser::class)->getAwardees($url))->pluck('award')->unique()->values()->all())
+        ->toBe(['почесне звання']);
+});
+
+it('names the honorary title award the same way when the group heading is singular', function () {
+    $url = decreeUrl('10742026-62253');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '1074_2026.html',
+        '/Присвоїти почесні звання:/u',
+        'Присвоїти почесне звання:',
+    ));
+
+    expect(collect(app(DecreeAwardeeParser::class)->getAwardees($url))->pluck('award')->unique()->first())
+        ->toBe('почесне звання');
+});
+
+it('names the honorary title award of a state awards decree written in typographic quotes', function () {
+    $url = decreeUrl('8752026-61465');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '875_2026.html',
+        '/<p><strong>Президент України В\.ЗЕЛЕНСЬКИЙ<\/strong><\/p>/u',
+        '<p><strong>Присвоїти почесне звання</strong></p>'
+            .'<p style="text-align:center"><u>”ЗАСЛУЖЕНИЙ ЖУРНАЛІСТ УКРАЇНИ”</u></p>'
+            .'<p>ГАЙНУ Олександру Петровичу — полковнику</p>'
+            .'<p><strong>Президент України В.ЗЕЛЕНСЬКИЙ</strong></p>',
+    ));
+
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(175)
+        ->and($awardees[174])->toBe([
+            'full_name' => 'Гайну Олександру Петровичу',
+            'rank' => 'полковнику',
+            'award' => 'почесне звання',
+            'is_posthumous' => false,
+        ]);
 });
