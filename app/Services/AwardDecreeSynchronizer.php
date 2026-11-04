@@ -132,6 +132,10 @@ class AwardDecreeSynchronizer implements AwardDecreeSynchronizerContract
                 's-num' => '',
                 'contain-rule' => 'contains',
                 's-text' => $searchText,
+                'date-from' => '24-02-2022',
+                'date-to' => date('d-m-Y'),
+                'order=desc' => 'desc',
+                // 'page' => '4',
             ]),
             $this->getSearchTexts(),
         );

@@ -211,6 +211,31 @@ it('parses every awardee mentioned in the decree', function () {
         ->and(collect($awardees)->pluck('award')->unique())->toHaveCount(11);
 });
 
+it('parses the decree that writes the award name in two paragraphs', function () {
+    $url = decreeUrl('6012025-56237');
+
+    fakeDecreeHtml(decreeFixture('601_2025.html'));
+
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(9)
+        ->and($awardees[0])->toBe([
+            'full_name' => 'Вакарчука Святослава Івановича',
+            'rank' => 'співака, музиканта, лідера гурту "Океан Ельзи"',
+            'award' => 'відзнакою Президента України «Національна легенда України»',
+            'is_posthumous' => false,
+        ])
+        ->and($awardees[4])->toBe([
+            'full_name' => 'Лифаря Сергія Михайловича',
+            'rank' => 'артиста балету, балетмейстера',
+            'award' => 'відзнакою Президента України «Національна легенда України»',
+            'is_posthumous' => true,
+        ])
+        ->and(collect($awardees)->pluck('award')->unique()->values()->all())->toBe([
+            'відзнакою Президента України «Національна легенда України»',
+        ]);
+});
+
 it('marks the awardees that were honoured posthumously', function () {
     $url = decreeUrl('8752026-61465');
 
