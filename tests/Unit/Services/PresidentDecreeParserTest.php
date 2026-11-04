@@ -56,6 +56,25 @@ it('parses the meta of the decree whose rank is separated by a hyphen', function
         ->and($parser->getDecreeDate($url)->toDateString())->toBe('2021-08-18');
 });
 
+it('parses the decree whose description leaves the quotes unescaped', function () {
+    $url = decreeUrl('10842026-62301');
+
+    fakeDecreeHtml(decreeFixture('1084_2026.html'));
+
+    $metaParser = app(DecreeMetaParser::class);
+
+    expect($metaParser->getDecreeNumber($url))->toBe('1084/2026')
+        ->and($metaParser->getDecreeDate($url)->toDateString())->toBe('2026-11-02')
+        ->and($metaParser->isHeroDecree($url))->toBeFalse();
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([[
+        'full_name' => 'Бекмана Марка',
+        'rank' => 'Спеціального старшого радника Першої леді Сполучених Штатів Америки',
+        'award' => 'відзнакою Президента України «Золоте cepцe»',
+        'is_posthumous' => false,
+    ]]);
+});
+
 it('tells the decree that confers the Hero of Ukraine title from the other award decrees', function () {
     $fixtures = [
         decreeUrl('2642022-42217') => '264_2022.html',

@@ -181,7 +181,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     private function getDescriptionHaystack(string $decreeUrl): string
     {
         return $this->descriptionCache[$decreeUrl] ??= $this->buildDescriptionHaystack(
-            HTMLDocument::createFromString($this->htmlFetcher->fetchHtml($decreeUrl)),
+            HTMLDocument::createFromString($this->htmlFetcher->fetchHtml($decreeUrl), LIBXML_NOERROR),
         );
     }
 
@@ -212,7 +212,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     private function parseMeta(string $html, string $decreeUrl): array
     {
-        $document = HTMLDocument::createFromString($html);
+        $document = HTMLDocument::createFromString($html, LIBXML_NOERROR);
         $this->assertAwardDecree($document, $decreeUrl);
 
         return [
@@ -312,7 +312,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     private function parseAwardees(string $html, string $decreeUrl): array
     {
-        $document = HTMLDocument::createFromString($html);
+        $document = HTMLDocument::createFromString($html, LIBXML_NOERROR);
         $this->assertAwardDecree($document, $decreeUrl);
 
         $articleBody = $document->querySelector('div[itemprop="articleBody"]');
