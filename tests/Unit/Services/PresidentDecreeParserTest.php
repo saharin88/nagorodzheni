@@ -581,3 +581,84 @@ it('names the honorary title award of a state awards decree written in typograph
             'is_posthumous' => false,
         ]);
 });
+
+it('parses the meta of the decree that names the award it confers', function () {
+    $url = decreeUrl('10792026-62297');
+
+    fakeDecreeHtml(decreeFixture('1079_2026.html'));
+
+    $parser = app(DecreeMetaParser::class);
+
+    expect($parser->getDecreeNumber($url))->toBe('1079/2026')
+        ->and($parser->getDecreeDate($url)->toDateString())->toBe('2026-11-02')
+        ->and($parser->isHeroDecree($url))->toBeFalse();
+});
+
+it('parses the decree that awards one person by name', function () {
+    $url = decreeUrl('10792026-62297');
+
+    fakeDecreeHtml(decreeFixture('1079_2026.html'));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
+        [
+            'full_name' => 'Трамп Меланію',
+            'rank' => 'Першу леді Сполучених Штатів Америки',
+            'award' => 'орденом княгині Ольги І ступеня',
+            'is_posthumous' => false,
+        ],
+    ]);
+});
+
+it('parses the decree that awards a list of people by name', function () {
+    $url = decreeUrl('9982026-61905');
+
+    fakeDecreeHtml(decreeFixture('998_2026.html'));
+
+    $awardees = app(DecreeAwardeeParser::class)->getAwardees($url);
+
+    expect($awardees)->toHaveCount(19)
+        ->and($awardees[0])->toBe([
+            'full_name' => 'Аніна Руслана Юрійовича',
+            'rank' => 'учасника бойових дій',
+            'award' => 'орденом «За мужність» ІІІ ступеня',
+            'is_posthumous' => true,
+        ])
+        ->and($awardees[18])->toBe([
+            'full_name' => 'Шикоряка Семена Михайловича',
+            'rank' => 'учасника бойових дій',
+            'award' => 'орденом «За мужність» ІІІ ступеня',
+            'is_posthumous' => true,
+        ]);
+});
+
+it('parses the awardee whose given name comes before the surname', function () {
+    $url = decreeUrl('10792026-62297');
+
+    fakeDecreeHtml(decreeFixtureWithout(
+        '1079_2026.html',
+        '/Нагородити орденом княгині Ольги І ступеня ТРАМП Меланію — Першу леді Сполучених Штатів Америки\./u',
+        'Нагородити орденом Європи Урсулу фон дер ЛЯЄН — Президента Європейської Комісії.',
+    ));
+
+    expect(app(DecreeAwardeeParser::class)->getAwardees($url))->toBe([
+        [
+            'full_name' => 'Урсулу Фон Дер Ляєн',
+            'rank' => 'Президента Європейської Комісії',
+            'award' => 'орденом Європи',
+            'is_posthumous' => false,
+        ],
+    ]);
+});
+
+it('does not read a decree that amends an awarding decree as an awarding decree', function () {
+    $url = decreeUrl('10792026-62297');
+
+    fakeDecreeHtml(str_replace(
+        'Про нагородження М.Трамп орденом княгині Ольги',
+        'Про внесення змін до Указу Президента України про нагородження М.Трамп',
+        decreeFixture('1079_2026.html')
+    ));
+
+    expect(fn () => app(DecreeMetaParser::class)->getDecreeNumber($url))
+        ->toThrow(DecreeParseException::class, 'Указ не стосується державних нагород');
+});
