@@ -25,7 +25,7 @@ it('stores the new decrees of the list together with their awardees', function (
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->times(4)
+        ->times(5)
         ->with(Mockery::on(function (string $url) use (&$requestedSearches): bool {
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
@@ -47,6 +47,7 @@ it('stores the new decrees of the list together with their awardees', function (
     // A decree that several searches list is stored once.
     expect($requestedSearches)->toBe([
         __('the search text of the decree list about state awards', locale: 'uk'),
+        __('the search text of the decree list about awarding', locale: 'uk'),
         __('the search text of the decree list about the Hero of Ukraine title', locale: 'uk'),
         __('the search text of the decree list about honorary titles', locale: 'uk'),
         __('the search text of the decree list about an honorary title', locale: 'uk'),
@@ -83,7 +84,7 @@ it('stores the decrees of every search', function () {
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->times(4)
+        ->times(5)
         ->andReturnUsing(function (string $url): array {
             parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
 
@@ -103,6 +104,35 @@ it('stores the decrees of every search', function () {
     $this->assertDatabaseCount('awardees', 179);
 });
 
+it('stores the decree that names the award it confers', function () {
+    Storage::fake('local');
+    Http::preventStrayRequests();
+
+    Http::fake([decreeUrl('10792026-62297') => Http::response(decreeFixture('1079_2026.html'), 200)]);
+
+    $this->mock(AwardDecreeListParser::class)
+        ->shouldReceive('getDecrees')
+        ->times(5)
+        ->andReturn([
+            [
+                'number' => '1079/2026',
+                'url' => decreeUrl('10792026-62297'),
+            ],
+        ]);
+
+    expect(app(AwardDecreeSynchronizer::class)->sync())
+        ->toBe(['added' => 1, 'awardees' => 1, 'skipped' => 0]);
+
+    $decree = Decree::query()->sole();
+
+    expect($decree->number)->toBe('1079/2026')
+        ->and($decree->date->toDateString())->toBe('2026-11-02')
+        ->and($decree->is_hero)->toBeFalse();
+
+    $this->assertDatabaseCount('awardees', 1);
+    Queue::assertPushed(InflectAwardeeNamesJob::class);
+});
+
 it('stores nothing when every decree of the list is stored already', function () {
     Storage::fake('local');
     Http::preventStrayRequests();
@@ -114,7 +144,7 @@ it('stores nothing when every decree of the list is stored already', function ()
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->times(4)
+        ->times(5)
         ->andReturn([
             [
                 'number' => '875/2026',
@@ -155,7 +185,7 @@ it('keeps importing the remaining decrees when one of them cannot be parsed', fu
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->times(4)
+        ->times(5)
         ->andReturn([
             [
                 'number' => '897/2026',
@@ -182,7 +212,7 @@ it('removes the decree it has just stored when its awardees cannot be imported',
 
     $this->mock(AwardDecreeListParser::class)
         ->shouldReceive('getDecrees')
-        ->times(4)
+        ->times(5)
         ->andReturn([
             [
                 'number' => '875/2026',

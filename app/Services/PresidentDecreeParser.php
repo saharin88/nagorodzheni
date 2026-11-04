@@ -33,6 +33,18 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     private const string INLINE_AWARDEE_PATTERN = '/^(?<award>.+?)\s+(?<awardee>[А-ЯІЇЄҐ][А-ЯІЇЄҐ’\'ʼ`´-]+\s+[А-ЯІЇЄҐ][\p{L}’\'ʼ`´-]*(?:\s.*)?)$/u';
 
     /**
+     * Some decrees write the given name before the fully capitalized surname, as in
+     * "Нагородити орденом Європи Урсулу фон дер ЛЯЄН — Президента Європейської
+     * Комісії". The particles of a foreign surname stay lowercase between the given
+     * name and the surname.
+     *
+     * The dash is required here, because an award may end with a capitalized word and
+     * a Roman numeral, as in "орденом княгині Ольги ІІІ ступеня", which would
+     * otherwise pass for such a name.
+     */
+    private const string INLINE_GIVEN_NAME_FIRST_PATTERN = '/^(?<award>.+?)\s+(?<awardee>[А-ЯІЇЄҐ][\p{L}’\'ʼ`´-]*(?:\s+[а-яіїєґ’\'ʼ`´-]+)*\s+[А-ЯІЇЄҐ][А-ЯІЇЄҐ’\'ʼ`´-]+(?:\s*\(посмертно\))?\s*[—–-]\s*.+)$/u';
+
+    /**
      * The dash of a decree separates the awardee name from the rank, and every decree
      * writes it as an en or an em dash. It is tried first, because a hyphen appears
      * inside surnames and given names as well, as in "КОСТЕНКО-СИДОРЕНКА" and
@@ -99,6 +111,19 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      * optional here too.
      */
     private const string HONORARY_TITLE_DESCRIPTION_PATTERN = '/ПРИСВО[ЄЕС]?НН\p{L}*\s+ПОЧЕСН/u';
+
+    /**
+     * The description of a decree that names the awards it confers instead of
+     * grouping them, as in "Про нагородження орденом «За мужність»" or
+     * "Про нагородження М.Трамп орденом княгині Ольги". Such a decree honours
+     * either one person or a whole list of them, so both forms are imported.
+     *
+     * The marker has to open the description: the decrees that amend an awarding
+     * decree name it further down ("Про внесення змін до Указу ... про
+     * нагородження ...") and award nobody. The leading non-letter run keeps a
+     * zero-width space or a byte order mark from hiding the marker.
+     */
+    private const string AWARDING_DESCRIPTION_PATTERN = '/^[^\p{L}]*ПРО НАГОРОДЖЕННЯ(?!\p{L})/u';
 
     /**
      * The paragraph that opens the list of honorary titles rather than naming one,
@@ -204,6 +229,7 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
             ! str_contains($haystack, self::STATE_AWARDS_DESCRIPTION_MARKER)
             && ! str_contains($haystack, self::HERO_OF_UKRAINE_DESCRIPTION_MARKER)
             && preg_match(self::HONORARY_TITLE_DESCRIPTION_PATTERN, $haystack) !== 1
+            && preg_match(self::AWARDING_DESCRIPTION_PATTERN, $haystack) !== 1
         ) {
             throw new DecreeParseException(
                 __('Decree is not about state awards [:url].', ['url' => $decreeUrl])
@@ -390,18 +416,22 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
      */
     private function splitInlineAwardee(string $awardText): ?array
     {
-        if (preg_match(self::INLINE_AWARDEE_PATTERN, $awardText, $matches) !== 1) {
-            return null;
+        foreach ([self::INLINE_AWARDEE_PATTERN, self::INLINE_GIVEN_NAME_FIRST_PATTERN] as $pattern) {
+            if (preg_match($pattern, $awardText, $matches) !== 1) {
+                continue;
+            }
+
+            if ($this->isSplitInsideQuotes($matches['award'])) {
+                continue;
+            }
+
+            return [
+                'award' => $matches['award'],
+                'awardee' => $matches['awardee'],
+            ];
         }
 
-        if ($this->isSplitInsideQuotes($matches['award'])) {
-            return null;
-        }
-
-        return [
-            'award' => $matches['award'],
-            'awardee' => $matches['awardee'],
-        ];
+        return null;
     }
 
     /**
