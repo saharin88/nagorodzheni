@@ -70,6 +70,18 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
     private const string AWARD_QUOTE_PATTERN = '/["“”„‟«»]/u';
 
     /**
+     * A decree may write the award name in two paragraphs: the awarding paragraph
+     * opens it and the paragraph below holds its quoted part, as in
+     * `Нагородити відзнакою Президента України` followed by
+     * `"Національна легенда України"`.
+     *
+     * Such a paragraph carries no awardee, so it has to be joined to the award
+     * instead of passing for an awardee line. The quotes are what tells it apart
+     * from the awardee lines, which are never quoted as a whole.
+     */
+    private const string AWARD_CONTINUATION_PATTERN = '/^[«“„"”‟][^«»“”„‟"]+[»“”„"‟]\s*\.?$/u';
+
+    /**
      * The Hero of Ukraine title is awarded with the order "Золота Зірка" or with the
      * order of the State, and the decrees name every one of those combinations at
      * length. Some of them write the title in the genitive case. The title stays a
@@ -321,21 +333,26 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
             throw new DecreeParseException(__('Unable to parse decree awardees [:url].', ['url' => $decreeUrl]));
         }
 
-        $awardees = [];
-        $award = '';
-        $hasAwardStarted = false;
-        $isHonoraryTitleSection = false;
+        $paragraphs = [];
 
         foreach ($articleBody->querySelectorAll('p') as $paragraph) {
             $text = Str::squish($paragraph->textContent);
 
-            if ($text === '') {
-                continue;
+            if ($text !== '') {
+                $paragraphs[] = $text;
             }
+        }
 
-            $isHonoraryTitleHeading = $isHonoraryTitleSection && $this->isHonoraryTitleHeading($text);
+        $awardees = [];
+        $award = '';
+        $hasAwardStarted = false;
+        $isHonoraryTitleSection = false;
+        $paragraphCount = count($paragraphs);
 
-            if ($isHonoraryTitleHeading) {
+        for ($index = 0; $index < $paragraphCount; $index++) {
+            $text = $paragraphs[$index];
+
+            if ($isHonoraryTitleSection && $this->isHonoraryTitleHeading($text)) {
                 continue;
             }
 
@@ -349,9 +366,14 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
                 $awardeeText = $text;
             } else {
                 $hasAwardStarted = true;
-                $award = $awardParagraph['award'];
-                $isHonoraryTitleSection = $award === self::HONORARY_TITLE_AWARD;
                 $awardeeText = $awardParagraph['awardee'] ?? '';
+                $award = $awardParagraph['award'];
+
+                if ($awardeeText === '') {
+                    [$award, $index] = $this->joinAwardContinuation($award, $paragraphs, $index);
+                }
+
+                $isHonoraryTitleSection = $award === self::HONORARY_TITLE_AWARD;
 
                 if ($awardeeText === '') {
                     continue;
@@ -396,6 +418,37 @@ class PresidentDecreeParser implements DecreeAwardeeParser, DecreeMetaParser
             'award' => $this->normalizeAwardName($inline['award']),
             'awardee' => $inline['awardee'],
         ];
+    }
+
+    /**
+     * Join the paragraphs that continue the award name to the award.
+     *
+     * A decree may write the award name in two paragraphs, as in
+     * `Нагородити відзнакою Президента України` followed by
+     * `"Національна легенда України"`. The continuing paragraph is joined to the
+     * award and skipped, so that it never passes for an awardee line.
+     *
+     * The honorary titles are left alone: a decree that confers them writes every
+     * title in quotes on a line of its own, and the system records all of them
+     * under the single award.
+     *
+     * @param  list<string>  $paragraphs
+     * @return array{0: string, 1: int} the award name and the index of its last paragraph
+     */
+    private function joinAwardContinuation(string $award, array $paragraphs, int $index): array
+    {
+        if ($award === self::HONORARY_TITLE_AWARD || preg_match(self::AWARD_QUOTE_PATTERN, $award) === 1) {
+            return [$award, $index];
+        }
+
+        while (
+            isset($paragraphs[$index + 1])
+            && preg_match(self::AWARD_CONTINUATION_PATTERN, $paragraphs[$index + 1]) === 1
+        ) {
+            $award .= ' '.$paragraphs[++$index];
+        }
+
+        return [$this->normalizeAwardName($award), $index];
     }
 
     /**
