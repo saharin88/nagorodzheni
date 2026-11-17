@@ -4,6 +4,7 @@ namespace App\Filament\Admin\Resources\Awardees\Schemas;
 
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
 
 class AwardeeForm
@@ -36,6 +37,10 @@ class AwardeeForm
                     ->searchable()
                     ->preload()
                     ->required(),
+                Toggle::make('is_posthumous')
+                    ->label(__('Is posthumous'))
+                    ->inline()
+                    ->default(0),
             ])
             ->columns(1);
     }
