@@ -7,6 +7,8 @@ use App\Models\Awardee;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Filament\Panel;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 
 use function Pest\Livewire\livewire;
 
@@ -36,6 +38,49 @@ it('shows a zero awardee count for an award nobody has received', function () {
         ->assertSeeInOrder(['Герой України', '0'])
         ->assertSeeHtml('fi-wi-stats-overview-stat-value')
         ->assertDontSee('посмертно');
+});
+
+it('renders the uploaded image for an award', function () {
+    Storage::fake('public');
+    Storage::disk('public')->put('award-images/medal.png', 'image');
+
+    $award = Award::factory()->create([
+        'name' => 'Орден За мужність',
+        'image_path' => 'award-images/medal.png',
+    ]);
+
+    livewire(AwardsStatsOverview::class)
+        ->assertOk()
+        ->assertSeeHtml('src="'.e(Storage::disk('public')->url($award->image_path)).'"')
+        ->assertSeeHtml('class="size-20 object-contain"')
+        ->assertSeeHtml('$refs.awardImageDialog.showModal()');
+});
+
+it('renders a fallback trophy icon when an award image is missing', function () {
+    Award::factory()->create([
+        'name' => 'Орден За мужність',
+        'image_path' => null,
+    ]);
+
+    livewire(AwardsStatsOverview::class)
+        ->assertOk()
+        ->assertDontSeeHtml('<img')
+        ->assertSeeHtml('size-12');
+});
+
+it('caches award statistics as plain arrays instead of serialized models', function () {
+    $award = Award::factory()->create(['name' => 'Герой України']);
+    Awardee::factory()->for($award, 'award')->create();
+
+    livewire(AwardsStatsOverview::class)
+        ->assertOk();
+
+    expect(Cache::get(AwardsStatsOverview::CACHE_KEY))->toBeArray();
+
+    livewire(AwardsStatsOverview::class)
+        ->assertOk()
+        ->assertSee('Герой України')
+        ->assertSee('1');
 });
 
 it('orders the awards by their sort position', function () {

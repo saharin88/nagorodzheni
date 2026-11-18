@@ -7,10 +7,15 @@ use App\Models\Awardee;
 use Filament\Facades\Filament;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 
 class AwardsStatsOverview extends StatsOverviewWidget
 {
+    public const string CACHE_KEY = 'filament.awards.stats-overview.v2';
+
+    protected static ?bool $isLazyLoaded = false;
+
     protected ?string $pollingInterval = null;
 
     /**
@@ -21,11 +26,14 @@ class AwardsStatsOverview extends StatsOverviewWidget
         $stats = [];
 
         foreach ($this->getAwardsWithAwardeeCounts() as $award) {
-            $stat = Stat::make($award->name, (int) $award->awardees_count)
-                ->url($this->getAwardeesUrl($award));
+            $stat = Stat::make($award['name'], (int) $award['awardees_count'])
+                ->view('filament.widgets.awards-stats-overview-stat', [
+                    'awardImageUrl' => $this->getImageUrl($award['image_path']),
+                ])
+                ->url($this->getAwardeesUrl((int) $award['id']));
 
-            if ($award->posthumous_awardees_count > 0) {
-                $stat->description(__('(:count posthumous)', ['count' => $award->posthumous_awardees_count]));
+            if ($award['posthumous_awardees_count'] > 0) {
+                $stat->description(__('(:count posthumous)', ['count' => $award['posthumous_awardees_count']]));
             }
 
             $stats[] = $stat;
@@ -34,30 +42,50 @@ class AwardsStatsOverview extends StatsOverviewWidget
         return $stats;
     }
 
-    /**
-     * @return Collection<int, Award>
-     */
-    protected function getAwardsWithAwardeeCounts(): Collection
+    protected function getImageUrl(?string $imagePath): ?string
     {
-        $awardeeCounts = Awardee::query()
-            ->selectRaw('award_id, COUNT(*) AS awardees_count, SUM(CASE WHEN is_posthumous THEN 1 ELSE 0 END) AS posthumous_awardees_count')
-            ->whereNotNull('award_id')
-            ->groupBy('award_id');
+        if (blank($imagePath)) {
+            return null;
+        }
 
-        return Award::query()
-            ->leftJoinSub($awardeeCounts, 'awardee_counts', 'awards.id', '=', 'awardee_counts.award_id')
-            ->select('awards.*')
-            ->selectRaw('COALESCE(awardee_counts.awardees_count, 0) AS awardees_count')
-            ->selectRaw('COALESCE(awardee_counts.posthumous_awardees_count, 0) AS posthumous_awardees_count')
-            ->orderBy('awards.sort')
-            ->orderBy('awards.name')
-            ->get();
+        $disk = Storage::disk('public');
+
+        return $disk->exists($imagePath)
+            ? $disk->url($imagePath)
+            : null;
+    }
+
+    /**
+     * @return array<int, array{id: int, name: string, image_path: string|null, awardees_count: int, posthumous_awardees_count: int}>
+     */
+    protected function getAwardsWithAwardeeCounts(): array
+    {
+        return Cache::remember(self::CACHE_KEY, now()->addMinutes(5), function (): array {
+            $awardeeCounts = Awardee::query()
+                ->selectRaw('award_id, COUNT(*) AS awardees_count, SUM(CASE WHEN is_posthumous THEN 1 ELSE 0 END) AS posthumous_awardees_count')
+                ->whereNotNull('award_id')
+                ->groupBy('award_id');
+
+            return Award::query()
+                ->leftJoinSub($awardeeCounts, 'awardee_counts', 'awards.id', '=', 'awardee_counts.award_id')
+                ->select([
+                    'awards.id',
+                    'awards.name',
+                    'awards.image_path',
+                ])
+                ->selectRaw('COALESCE(awardee_counts.awardees_count, 0) AS awardees_count')
+                ->selectRaw('COALESCE(awardee_counts.posthumous_awardees_count, 0) AS posthumous_awardees_count')
+                ->orderBy('awards.sort')
+                ->orderBy('awards.name')
+                ->get()
+                ->toArray();
+        });
     }
 
     /**
      * Resolve the awardee list of the panel in use, so the widget is not tied to one panel.
      */
-    protected function getAwardeesUrl(Award $award): ?string
+    protected function getAwardeesUrl(int $awardId): ?string
     {
         $panel = Filament::getCurrentPanel();
 
@@ -68,7 +96,7 @@ class AwardsStatsOverview extends StatsOverviewWidget
         return $panel->getResourceUrl(Awardee::class, 'index', [
             'filters' => [
                 'award' => [
-                    'values' => [$award->getKey()],
+                    'values' => [$awardId],
                 ],
             ],
         ]);

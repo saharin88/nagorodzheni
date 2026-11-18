@@ -12,12 +12,13 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string $name
+ * @property string|null $image_path
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read int|null $awardees_count
  * @property-read int|null $posthumous_awardees_count
  */
-#[Fillable(['name', 'sort'])]
+#[Fillable(['name', 'sort', 'image_path'])]
 class Award extends Model
 {
     /** @use HasFactory<AwardFactory> */
