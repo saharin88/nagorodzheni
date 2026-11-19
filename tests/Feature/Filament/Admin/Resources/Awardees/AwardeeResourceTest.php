@@ -39,8 +39,8 @@ it('renders the awardees list page', function () {
 
 it('offers the nominative names filling action', function () {
     livewire(ListAwardees::class)
-        ->assertTableBulkActionExists('fillNominativeNames')
-        ->assertTableBulkActionHasLabel('fillNominativeNames', __('Fill nominative names'));
+        ->assertActionExists(TestAction::make('fillNominativeNames')->table()->bulk())
+        ->assertActionHasLabel(TestAction::make('fillNominativeNames')->table()->bulk(), __('Fill nominative names'));
 });
 
 it('lists awards with their decree numbers in the table', function () {
@@ -126,13 +126,11 @@ it('creates an awardee from the form', function () {
 
     livewire(ListAwardees::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'full_name' => 'Сидоренко Сидір Сидорович',
-            'full_name_nominative' => 'Сидоренко Сидір Сидорович',
-            'rank' => 'полковник',
-            'decree_id' => $decree->getKey(),
-            'award_id' => $award->getKey(),
-        ])
+        ->set('mountedActions.0.data.full_name', 'Сидоренко Сидір Сидорович')
+        ->set('mountedActions.0.data.full_name_nominative', 'Сидоренко Сидір Сидорович')
+        ->set('mountedActions.0.data.rank', 'полковник')
+        ->set('mountedActions.0.data.decree_id', $decree->getKey())
+        ->set('mountedActions.0.data.award_id', $award->getKey())
         ->callMountedAction()
         ->assertHasNoFormErrors();
 
@@ -148,12 +146,10 @@ it('creates an awardee from the form', function () {
 it('validates awardee form fields on create', function () {
     livewire(ListAwardees::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'full_name' => null,
-            'rank' => null,
-            'decree_id' => null,
-            'award_id' => null,
-        ])
+        ->set('mountedActions.0.data.full_name', null)
+        ->set('mountedActions.0.data.rank', null)
+        ->set('mountedActions.0.data.decree_id', null)
+        ->set('mountedActions.0.data.award_id', null)
         ->callMountedAction()
         ->assertHasFormErrors([
             'full_name' => 'required',
@@ -171,28 +167,37 @@ it('does not register separate create and edit pages', function () {
 });
 
 it('edits an awardee from the modal table action', function () {
+    $originalDecree = Decree::factory()->create();
+    $originalAward = Award::factory()->create(['name' => 'Герой України']);
+    $newAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+
     $awardee = Awardee::factory()->create([
         'full_name' => 'Іваненко Іван Іванович',
         'full_name_nominative' => 'Іваненко Іван Іванович',
         'rank' => 'капітан',
+        'decree_id' => $originalDecree->getKey(),
+        'award_id' => $originalAward->getKey(),
+        'is_posthumous' => false,
     ]);
 
     livewire(ListAwardees::class)
-        ->callAction(
-            TestAction::make('edit')->table($awardee),
-            data: [
-                'full_name' => 'Іваненко Іван Петрович',
-                'full_name_nominative' => 'Іваненко Іван Петрович',
-                'rank' => 'майор',
-            ],
-        )
+        ->mountAction(TestAction::make('edit')->table($awardee))
+        ->set('mountedActions.0.data.full_name', 'Іваненко Іван Петрович')
+        ->set('mountedActions.0.data.full_name_nominative', 'Іваненко Іван Петрович')
+        ->set('mountedActions.0.data.rank', 'майор')
+        ->set('mountedActions.0.data.award_id', $newAward->getKey())
+        ->set('mountedActions.0.data.is_posthumous', true)
+        ->callMountedAction()
         ->assertHasNoFormErrors();
 
     $awardee->refresh();
 
     expect($awardee->full_name)->toBe('Іваненко Іван Петрович')
         ->and($awardee->full_name_nominative)->toBe('Іваненко Іван Петрович')
-        ->and($awardee->rank)->toBe('майор');
+        ->and($awardee->rank)->toBe('майор')
+        ->and($awardee->award_id)->toBe($newAward->getKey())
+        ->and($awardee->decree_id)->toBe($originalDecree->getKey())
+        ->and($awardee->is_posthumous)->toBeTrue();
 });
 
 it('queues the nominative names filling for the selected awardees', function () {
@@ -212,7 +217,8 @@ it('queues the nominative names filling for the selected awardees', function () 
     ]);
 
     livewire(ListAwardees::class)
-        ->callTableBulkAction('fillNominativeNames', [$firstAwardee, $secondAwardee, $alreadyFilledAwardee])
+        ->selectTableRecords([$firstAwardee, $secondAwardee, $alreadyFilledAwardee])
+        ->callAction(TestAction::make('fillNominativeNames')->table()->bulk())
         ->assertNotified(
             Notification::make()
                 ->success()
@@ -249,7 +255,11 @@ it('changes the award of the selected awardees in bulk', function () {
     $unselectedAwardee = Awardee::factory()->for($heroAward, 'award')->create();
 
     livewire(ListAwardees::class)
-        ->callTableBulkAction('changeAward', [$firstAwardee, $secondAwardee], ['award_id' => $orderAward->getKey()])
+        ->selectTableRecords([$firstAwardee, $secondAwardee])
+        ->callAction(
+            TestAction::make('changeAward')->table()->bulk(),
+            data: ['award_id' => $orderAward->getKey()],
+        )
         ->assertHasNoFormErrors()
         ->assertNotified(
             Notification::make()
@@ -269,7 +279,8 @@ it('offers the award choice when changing the award of the selected awardees', f
     $awardee = Awardee::factory()->for($heroAward, 'award')->create();
 
     livewire(ListAwardees::class)
-        ->mountTableBulkAction('changeAward', [$awardee])
+        ->selectTableRecords([$awardee])
+        ->mountAction(TestAction::make('changeAward')->table()->bulk())
         ->assertSee('Герой України')
         ->assertSee('Орден Богдана Хмельницького');
 });
@@ -279,7 +290,8 @@ it('requires an award to change the award of the selected awardees', function ()
     $awardee = Awardee::factory()->for($heroAward, 'award')->create();
 
     livewire(ListAwardees::class)
-        ->callTableBulkAction('changeAward', [$awardee])
+        ->selectTableRecords([$awardee])
+        ->callAction(TestAction::make('changeAward')->table()->bulk())
         ->assertHasFormErrors([
             'award_id' => 'required',
         ]);

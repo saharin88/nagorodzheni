@@ -104,9 +104,7 @@ it('creates a decree from the form', function () {
 
     livewire(ListDecrees::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'url' => $url,
-        ])
+        ->set('mountedActions.0.data.url', $url)
         ->goToNextWizardStep()
         ->callMountedAction()
         ->assertHasNoFormErrors();
@@ -140,9 +138,7 @@ it('marks a manually created hero decree', function () {
 
     livewire(ListDecrees::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'url' => $url,
-        ])
+        ->set('mountedActions.0.data.url', $url)
         ->goToNextWizardStep()
         ->callMountedAction()
         ->assertHasNoFormErrors();
@@ -153,9 +149,7 @@ it('marks a manually created hero decree', function () {
 it('validates decree form fields on create', function () {
     livewire(ListDecrees::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'url' => 'not-an-url',
-        ])
+        ->set('mountedActions.0.data.url', 'not-an-url')
         ->goToNextWizardStep()
         ->assertHasFormErrors([
             'url' => 'url',
@@ -170,8 +164,7 @@ it('does not expose decree editing actions', function () {
     ]);
 
     livewire(ListDecrees::class)
-        ->assertActionDoesNotExist(TestAction::make('edit')->table($decree))
-        ->assertTableActionDoesNotExist('edit', null, $decree);
+        ->assertActionDoesNotExist(TestAction::make('edit')->table($decree));
 });
 
 it('counts the awardees of every decree and separates the posthumous ones', function () {

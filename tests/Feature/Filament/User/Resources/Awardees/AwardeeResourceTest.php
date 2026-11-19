@@ -2,6 +2,7 @@
 
 use App\Filament\User\Resources\Awardees\Pages\ListAwardees;
 use App\Models\Awardee;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 
 use function Pest\Livewire\livewire;
@@ -17,10 +18,10 @@ it('lists the awardees without any mutation actions', function () {
         ->assertOk()
         ->assertCanSeeTableRecords([$awardee])
         ->assertActionDoesNotExist('create')
-        ->assertTableActionDoesNotExist('edit', null, $awardee)
-        ->assertTableActionDoesNotExist('delete', null, $awardee)
-        ->assertTableBulkActionDoesNotExist('changeAward')
-        ->assertTableBulkActionDoesNotExist('delete');
+        ->assertActionDoesNotExist(TestAction::make('edit')->table($awardee))
+        ->assertActionDoesNotExist(TestAction::make('delete')->table($awardee))
+        ->assertActionDoesNotExist(TestAction::make('changeAward')->table()->bulk())
+        ->assertActionDoesNotExist(TestAction::make('delete')->table()->bulk());
 });
 
 it('filters the awardees by rank', function () {

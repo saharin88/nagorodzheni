@@ -11,9 +11,13 @@ use Illuminate\Support\LazyCollection;
 
 class DecreeSeeder extends Seeder
 {
+    public function __construct(
+        private readonly ?string $filePath = null,
+    ) {}
+
     public function run(): void
     {
-        $filePath = database_path('seeders/data/decrees.csv');
+        $filePath = $this->filePath ?? database_path('seeders/data/decrees.csv');
 
         if (! file_exists($filePath)) {
             $this->command->error(__('File not found at path: :path', ['path' => $filePath]));

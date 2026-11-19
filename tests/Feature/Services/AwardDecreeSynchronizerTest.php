@@ -11,11 +11,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
-beforeEach(function () {
-    Queue::fake([InflectAwardeeNamesJob::class]);
-});
-
 it('stores the new decrees of the list together with their awardees', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -74,6 +71,7 @@ it('stores the new decrees of the list together with their awardees', function (
 });
 
 it('stores the decrees of every search', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -105,6 +103,7 @@ it('stores the decrees of every search', function () {
 });
 
 it('stores the decree that names the award it confers', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -134,6 +133,7 @@ it('stores the decree that names the award it confers', function () {
 });
 
 it('stores nothing when every decree of the list is stored already', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -175,6 +175,7 @@ it('rejects the list that carries no decrees at all', function () {
 });
 
 it('keeps importing the remaining decrees when one of them cannot be parsed', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
 
@@ -204,6 +205,7 @@ it('keeps importing the remaining decrees when one of them cannot be parsed', fu
 });
 
 it('removes the decree it has just stored when its awardees cannot be imported', function () {
+    Queue::fake([InflectAwardeeNamesJob::class]);
     Storage::fake('local');
     Http::preventStrayRequests();
     Log::spy();
@@ -227,6 +229,11 @@ it('removes the decree it has just stored when its awardees cannot be imported',
 
     expect(app(AwardDecreeSynchronizer::class)->sync())
         ->toBe(['added' => 0, 'awardees' => 0, 'skipped' => 1]);
+
+    $this->assertDatabaseEmpty('decrees');
+    $this->assertDatabaseEmpty('awardees');
+    $this->assertDatabaseEmpty('awards');
+    Queue::assertNotPushed(InflectAwardeeNamesJob::class);
 
     $this->assertDatabaseCount('decrees', 0);
     $this->assertDatabaseCount('awardees', 0);

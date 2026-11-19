@@ -30,10 +30,8 @@ it('renders the awards list page', function () {
 
 it('creates an award from the modal action', function () {
     livewire(ListAwards::class)
-        ->mountAction(CreateAction::class)
-        ->fillForm([
-            'name' => 'Герой України',
-        ])
+        ->mountAction('create')
+        ->set('mountedActions.0.data.name', 'Герой України')
         ->callMountedAction()
         ->assertHasNoFormErrors();
 
@@ -45,9 +43,7 @@ it('creates an award from the modal action', function () {
 it('validates the award form fields on create', function () {
     livewire(ListAwards::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'name' => null,
-        ])
+        ->set('mountedActions.0.data.name', null)
         ->callMountedAction()
         ->assertHasFormErrors([
             'name' => 'required',
@@ -59,9 +55,7 @@ it('rejects a duplicate award name', function () {
 
     livewire(ListAwards::class)
         ->mountAction(CreateAction::class)
-        ->fillForm([
-            'name' => 'Герой України',
-        ])
+        ->set('mountedActions.0.data.name', 'Герой України')
         ->callMountedAction()
         ->assertHasFormErrors([
             'name' => 'unique',
@@ -72,15 +66,39 @@ it('edits an award from the modal table action', function () {
     $award = Award::factory()->create(['name' => 'Герой України']);
 
     livewire(ListAwards::class)
-        ->callAction(
-            TestAction::make('edit')->table($award),
-            data: [
-                'name' => 'Орден Богдана Хмельницького',
-            ],
-        )
+        ->mountAction(TestAction::make('edit')->table($award))
+        ->set('mountedActions.0.data.name', 'Орден Богдана Хмельницького')
+        ->callMountedAction()
         ->assertHasNoFormErrors();
 
     expect($award->refresh()->name)->toBe('Орден Богдана Хмельницького');
+});
+
+it('allows an award to keep its current name when edited', function () {
+    $award = Award::factory()->create(['name' => 'Герой України']);
+
+    livewire(ListAwards::class)
+        ->mountAction(TestAction::make('edit')->table($award))
+        ->set('mountedActions.0.data.name', 'Герой України')
+        ->callMountedAction()
+        ->assertHasNoFormErrors();
+
+    expect($award->refresh()->name)->toBe('Герой України');
+});
+
+it('rejects another award name while editing', function () {
+    Award::factory()->create(['name' => 'Герой України']);
+    $award = Award::factory()->create(['name' => 'Орден За мужність']);
+
+    livewire(ListAwards::class)
+        ->mountAction(TestAction::make('edit')->table($award))
+        ->set('mountedActions.0.data.name', 'Герой України')
+        ->callMountedAction()
+        ->assertHasFormErrors([
+            'name' => 'unique',
+        ]);
+
+    expect($award->refresh()->name)->toBe('Орден За мужність');
 });
 
 it('deletes an award from the table', function () {
@@ -135,8 +153,8 @@ it('does not register separate create and edit pages', function () {
 
 it('offers the award merging bulk action', function () {
     livewire(ListAwards::class)
-        ->assertTableBulkActionExists('mergeAwards')
-        ->assertTableBulkActionHasLabel('mergeAwards', 'Об\'єднати нагороди');
+        ->assertActionExists(TestAction::make('mergeAwards')->table()->bulk())
+        ->assertActionHasLabel(TestAction::make('mergeAwards')->table()->bulk(), 'Об\'єднати нагороди');
 });
 
 it('merges the selected awards into the one with the most awardees', function () {
@@ -147,7 +165,8 @@ it('merges the selected awards into the one with the most awardees', function ()
     $duplicateAwardee = Awardee::factory()->for($duplicateAward, 'award')->create();
 
     livewire(ListAwards::class)
-        ->callTableBulkAction('mergeAwards', [$duplicateAward, $primaryAward])
+        ->selectTableRecords([$duplicateAward, $primaryAward])
+        ->callAction(TestAction::make('mergeAwards')->table()->bulk())
         ->assertNotified(
             Notification::make()
                 ->success()
@@ -164,7 +183,8 @@ it('refuses to merge a single selected award', function () {
     $award = Award::factory()->create();
 
     livewire(ListAwards::class)
-        ->callTableBulkAction('mergeAwards', [$award])
+        ->selectTableRecords([$award])
+        ->callAction(TestAction::make('mergeAwards')->table()->bulk())
         ->assertNotified(
             Notification::make()
                 ->danger()

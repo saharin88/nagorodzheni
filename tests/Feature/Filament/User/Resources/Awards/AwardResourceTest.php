@@ -4,6 +4,7 @@ use App\Filament\User\Resources\Awardees\AwardeeResource;
 use App\Filament\User\Resources\Awards\Pages\ListAwards;
 use App\Models\Award;
 use App\Models\Awardee;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 
 use function Pest\Livewire\livewire;
@@ -19,10 +20,10 @@ it('lists the awards without any mutation actions', function () {
         ->assertOk()
         ->assertCanSeeTableRecords([$award])
         ->assertActionDoesNotExist('create')
-        ->assertTableActionDoesNotExist('edit', null, $award)
-        ->assertTableActionDoesNotExist('delete', null, $award)
-        ->assertTableBulkActionDoesNotExist('mergeAwards')
-        ->assertTableBulkActionDoesNotExist('delete');
+        ->assertActionDoesNotExist(TestAction::make('edit')->table($award))
+        ->assertActionDoesNotExist(TestAction::make('delete')->table($award))
+        ->assertActionDoesNotExist(TestAction::make('mergeAwards')->table()->bulk())
+        ->assertActionDoesNotExist(TestAction::make('delete')->table()->bulk());
 });
 
 it('links the awardee count to the awardee list of the user panel', function () {

@@ -3,6 +3,7 @@
 use App\Filament\User\Resources\Decrees\Pages\ListDecrees;
 use App\Models\Awardee;
 use App\Models\Decree;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 
 use function Pest\Livewire\livewire;
@@ -18,9 +19,9 @@ it('lists the decrees without any mutation actions', function () {
         ->assertOk()
         ->assertCanSeeTableRecords([$decree])
         ->assertActionDoesNotExist('create')
-        ->assertTableActionDoesNotExist('importAwardees', null, $decree)
-        ->assertTableActionDoesNotExist('delete', null, $decree)
-        ->assertTableBulkActionDoesNotExist('delete');
+        ->assertActionDoesNotExist(TestAction::make('importAwardees')->table($decree))
+        ->assertActionDoesNotExist(TestAction::make('delete')->table($decree))
+        ->assertActionDoesNotExist(TestAction::make('delete')->table()->bulk());
 });
 
 it('counts the awardees of every decree', function () {

@@ -6,26 +6,15 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    $this->testDirectory = database_path('seeders/data');
-    $this->testFilePath = database_path('seeders/data/decrees.csv');
-    $this->backupFilePath = database_path('seeders/data/decrees.csv.bak');
+    $this->testFilePath = tempnam(sys_get_temp_dir(), 'decrees-seeder-');
+    unlink($this->testFilePath);
 
-    if (! is_dir($this->testDirectory)) {
-        mkdir($this->testDirectory, 0755, true);
-    }
-
-    if (file_exists($this->testFilePath)) {
-        rename($this->testFilePath, $this->backupFilePath);
-    }
+    $this->app->instance(DecreeSeeder::class, new DecreeSeeder($this->testFilePath));
 });
 
 afterEach(function () {
     if (file_exists($this->testFilePath)) {
         unlink($this->testFilePath);
-    }
-
-    if (file_exists($this->backupFilePath)) {
-        rename($this->backupFilePath, $this->testFilePath);
     }
 });
 
@@ -105,6 +94,8 @@ describe('DecreeSeeder Import', function () {
     describe('data validation and fallbacks', function () {
 
         it('falls back to current date on invalid date format', function () {
+            $this->travelTo('2026-09-10 12:00:00');
+
             $csvContent = "Number,Date,URL\n".
                           "789/2026,invalid-date-format,https://example.com/789\n";
 
