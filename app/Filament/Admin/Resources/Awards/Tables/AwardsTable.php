@@ -14,6 +14,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -28,6 +29,13 @@ class AwardsTable
             ->defaultSort('sort')
             ->reorderable('sort')
             ->columns([
+                ViewColumn::make('image_path')
+                    ->label('')
+                    ->view('filament.tables.columns.award-image')
+                    ->extraAttributes(['class' => 'flex w-full justify-center'])
+                    ->extraCellAttributes(['class' => 'text-center'])
+                    ->toggleable()
+                    ->disabledClick(),
                 TextColumn::make('name')
                     ->label(__('Award name'))
                     ->searchable()

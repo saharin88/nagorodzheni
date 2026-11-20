@@ -5,6 +5,7 @@ namespace App\Filament\User\Resources\Awards\Tables;
 use App\Filament\User\Resources\Awardees\AwardeeResource;
 use App\Models\Award;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -16,6 +17,13 @@ class AwardsTable
             ->defaultPaginationPageOption(50)
             ->defaultSort('sort')
             ->columns([
+                ViewColumn::make('image_path')
+                    ->label('')
+                    ->view('filament.tables.columns.award-image')
+                    ->extraAttributes(['class' => 'flex w-full justify-center'])
+                    ->extraCellAttributes(['class' => 'text-center'])
+                    ->toggleable()
+                    ->disabledClick(),
                 TextColumn::make('name')
                     ->label(__('Award name'))
                     ->searchable()
