@@ -49,9 +49,11 @@ it('renders the uploaded image for an award', function () {
         'image_path' => 'award-images/medal.png',
     ]);
 
+    $expectedUrl = Storage::disk('public')->url($award->image_path).'?v='.$award->updated_at->timestamp;
+
     livewire(AwardsStatsOverview::class)
         ->assertOk()
-        ->assertSeeHtml('src="'.e(Storage::disk('public')->url($award->image_path)).'"')
+        ->assertSeeHtml('src="'.e($expectedUrl).'"')
         ->assertSeeHtml('class="size-20 object-contain"')
         ->assertSeeHtml('$refs.awardImageDialog.showModal()');
 });

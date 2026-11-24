@@ -26,9 +26,11 @@ class AwardsStatsOverview extends StatsOverviewWidget
         $stats = [];
 
         foreach ($this->getAwardsWithAwardeeCounts() as $award) {
+            $imageUrl = $this->getImageUrl($award['image_path']);
+
             $stat = Stat::make($award['name'], (int) $award['awardees_count'])
                 ->view('filament.widgets.awards-stats-overview-stat', [
-                    'awardImageUrl' => $this->getImageUrl($award['image_path']),
+                    'awardImageUrl' => $imageUrl ? $imageUrl.'?v='.$award['updated_at'] : null,
                 ])
                 ->url($this->getAwardeesUrl((int) $award['id']));
 
@@ -56,7 +58,7 @@ class AwardsStatsOverview extends StatsOverviewWidget
     }
 
     /**
-     * @return array<int, array{id: int, name: string, image_path: string|null, awardees_count: int, posthumous_awardees_count: int}>
+     * @return array<int, array{id: int, name: string, image_path: string|null, awardees_count: int, posthumous_awardees_count: int, updated_at: int}>
      */
     protected function getAwardsWithAwardeeCounts(): array
     {
@@ -72,9 +74,13 @@ class AwardsStatsOverview extends StatsOverviewWidget
                     'awards.id',
                     'awards.name',
                     'awards.image_path',
+                    'awards.updated_at',
                 ])
                 ->selectRaw('COALESCE(awardee_counts.awardees_count, 0) AS awardees_count')
                 ->selectRaw('COALESCE(awardee_counts.posthumous_awardees_count, 0) AS posthumous_awardees_count')
+                ->withCasts([
+                    'updated_at' => 'timestamp',
+                ])
                 ->orderBy('awards.sort')
                 ->orderBy('awards.name')
                 ->get()
