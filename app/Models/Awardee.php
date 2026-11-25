@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\FlushesAwardsCache;
 use Database\Factories\AwardeeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -26,7 +27,7 @@ use Illuminate\Support\Carbon;
 class Awardee extends Model
 {
     /** @use HasFactory<AwardeeFactory> */
-    use HasFactory;
+    use FlushesAwardsCache, HasFactory;
 
     /**
      * @return BelongsTo<Decree, $this>

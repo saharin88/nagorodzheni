@@ -6,6 +6,7 @@ use App\Contracts\AwardMerger as AwardMergerContract;
 use App\Models\Award;
 use App\Models\Awardee;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -32,6 +33,8 @@ class AwardMerger implements AwardMergerContract
                 ->whereKey($duplicateAwardIds)
                 ->delete();
         });
+
+        Cache::forget(AwardeeSearch::AWARDS_CACHE_KEY);
 
         return $primaryAward;
     }

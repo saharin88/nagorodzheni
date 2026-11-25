@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\FlushesAwardsCache;
 use Database\Factories\AwardFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -22,7 +23,7 @@ use Illuminate\Support\Carbon;
 class Award extends Model
 {
     /** @use HasFactory<AwardFactory> */
-    use HasFactory;
+    use FlushesAwardsCache,  HasFactory;
 
     /**
      * @return HasMany<Awardee, $this>

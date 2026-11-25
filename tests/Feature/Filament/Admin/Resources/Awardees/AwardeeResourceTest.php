@@ -108,16 +108,24 @@ it('filters awardees by decree number', function () {
 });
 
 it('lists award names and decree numbers in the filter options', function () {
-    Award::factory()->create(['name' => 'Герой України']);
-    Decree::factory()->create(['number' => '123/2026', 'date' => '2026-01-15']);
-    Decree::factory()->create(['number' => '456/2026', 'date' => '2026-02-15']);
+    $award = Award::factory()->create(['name' => 'Герой України']);
+    $otherAward = Award::factory()->create(['name' => 'Орден Богдана Хмельницького']);
+    $olderDecree = Decree::factory()->create(['number' => '123/2026', 'date' => '2026-01-15']);
+    $newerDecree = Decree::factory()->create(['number' => '456/2026', 'date' => '2026-02-15']);
 
-    $html = str_replace('\\', '', livewire(ListAwardees::class)->assertOk()->html());
+    $awardeeInOlderDecree = Awardee::factory()->for($award, 'award')->for($olderDecree, 'decree')->create();
+    $awardeeInNewerDecree = Awardee::factory()->for($otherAward, 'award')->for($newerDecree, 'decree')->create();
 
-    expect($html)->toContain('Герой України')
-        ->and($html)->toContain('123/2026')
-        ->and($html)->toContain('456/2026')
-        ->and(strpos($html, '456/2026'))->toBeLessThan(strpos($html, '123/2026'));
+    livewire(ListAwardees::class)
+        ->assertTableFilterExists('award')
+        ->assertTableFilterExists('decree')
+        ->filterTable('award', $award->getKey())
+        ->assertCanSeeTableRecords([$awardeeInOlderDecree])
+        ->assertCanNotSeeTableRecords([$awardeeInNewerDecree])
+        ->resetTableFilters()
+        ->filterTable('decree', $newerDecree->getKey())
+        ->assertCanSeeTableRecords([$awardeeInNewerDecree])
+        ->assertCanNotSeeTableRecords([$awardeeInOlderDecree]);
 });
 
 it('creates an awardee from the form', function () {
@@ -280,9 +288,18 @@ it('offers the award choice when changing the award of the selected awardees', f
 
     livewire(ListAwardees::class)
         ->selectTableRecords([$awardee])
-        ->mountAction(TestAction::make('changeAward')->table()->bulk())
-        ->assertSee('Герой України')
-        ->assertSee('Орден Богдана Хмельницького');
+        ->callAction(
+            TestAction::make('changeAward')->table()->bulk(),
+            data: ['award_id' => $heroAward->getKey()],
+        )
+        ->assertHasNoFormErrors()
+        ->callAction(
+            TestAction::make('changeAward')->table()->bulk(),
+            data: ['award_id' => $orderAward->getKey()],
+        )
+        ->assertHasNoFormErrors();
+
+    expect($awardee->refresh()->award_id)->toBe($orderAward->getKey());
 });
 
 it('requires an award to change the award of the selected awardees', function () {
